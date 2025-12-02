@@ -4,6 +4,12 @@
 > 目标：为**教学 / VRChat / 会议 / 跨语言交流**提供统一的语音交互内核。  
 > 本文档面向：产品合作者、后端开发者、桌面端开发者。
 
+## 当前实现状态（Phase 0）
+
+- 已落地：核心类型（Session/Utterance/Profile）、配置加载、基础 logging、Profile 示例、CLI smoke 脚本。
+- 未落地：ASR/LLM/TTS 具体实现、Audio I/O、Agent 自动发声逻辑。
+- 快速体验：`python3 -m pip install -r requirements.txt` → `cp config/settings.example.yml config/settings.yml` → `python3 cli/smoke.py --profile Teaching`。更多说明见仓库根目录的 README。
+
 ---
 
 ## 1. 产品定位 & 目标
