@@ -1,0 +1,16 @@
+name: "VRChat"
+input_mode: "asr"
+tts_backend: "elevenlabs"
+default_voice: "shu_casual"
+output_device: "vb_cable_input"
+reply_strategy:
+  auto_suggest: true
+  auto_speak: true
+  max_suggestion_length: 60
+  allow_agent_mode: true
+prompts:
+  suggestion: |
+    你是一个友好、轻松、稍微幽默的 VRChat 玩家。
+    根据下面的对话，生成 2 条候选回复，简短、不尴尬、自然。
+  translate: |
+    把对方说的内容翻译成中文，并用一句话解释他的语气和意图。

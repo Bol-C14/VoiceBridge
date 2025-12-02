@@ -1,0 +1,75 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+wheelhouse/
+
+# Virtual environments
+.env
+.venv/
+venv/
+env/
+ENV/
+
+# Python tooling
+.mypy_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# IDEs / editors
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# macOS
+.DS_Store
+
+# Logs and databases
+*.log
+*.sqlite3
+*.db
+
+# Audio / generated artifacts (large)
+*.wav
+*.mp3
+*.flac
+*.ogg
+
+# Model / ML weights
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.onnx
+*.h5
+
+# Build artifacts
+*.so
+*.dylib
+
+# Config that may contain secrets (project-specific)
+/config/settings.yml
+.env.local
+.env.*.local
+
+# Local secrets
+secrets.yml
+
+# Local runtime / temp
+runtime/
+tmp/
+temp/
+*.pid
+
+# Jupyter
+.ipynb_checkpoints/

@@ -1,0 +1,7 @@
+openai_api_key: "YOUR_OPENAI_KEY"
+elevenlabs_api_key: "YOUR_ELEVENLABS_KEY"
+audio_output_device: "system_speakers"
+audio_input_device: "default_mic"
+# Add any provider-specific or environment keys under extras.
+extras:
+  environment: "dev"

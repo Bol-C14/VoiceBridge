@@ -1,0 +1,18 @@
+name: "Teaching"
+input_mode: "manual+asr"
+tts_backend: "elevenlabs"
+default_voice: "shu_teaching"
+output_device: "system_speakers"
+reply_strategy:
+  auto_suggest: true
+  auto_speak: false
+  max_suggestion_length: 120
+  allow_agent_mode: false
+prompts:
+  explain: |
+    你是一名耐心的计算机辅导老师，面对的是基础不牢但聪明的学生。
+    用分步骤、类比和例子解释下面的内容，适合直接朗读。
+  suggestion: |
+    根据下面的对话，为老师生成 2 条候选回答，用口语化、易懂风格。
+  summarize: |
+    总结本节对话中出现的关键概念和易错点。
