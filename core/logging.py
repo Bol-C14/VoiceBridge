@@ -10,9 +10,13 @@ from typing import Iterator
 DEFAULT_LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 
 
-def setup_logging(level: int = logging.INFO, log_file: Path | None = None) -> None:
+def setup_logging(
+    level: int = logging.INFO,
+    log_file: Path | None = None,
+    enable_file: bool = False,
+) -> None:
     """
-    Configure root logging for both console and optional file output.
+    Configure root logging for console and optional file output.
     Safe to call multiple times; existing handlers will be replaced.
     """
     root = logging.getLogger()
@@ -20,9 +24,10 @@ def setup_logging(level: int = logging.INFO, log_file: Path | None = None) -> No
         root.handlers.clear()
 
     handlers: list[logging.Handler] = [logging.StreamHandler()]
-    if log_file:
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        handlers.append(logging.FileHandler(log_file))
+    if enable_file:
+        target = log_file or Path("logs/voicebridge.log")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(target))
 
     logging.basicConfig(level=level, format=DEFAULT_LOG_FORMAT, handlers=handlers)
 

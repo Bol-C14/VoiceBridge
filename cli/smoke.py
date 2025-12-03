@@ -10,7 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from conversation.session_manager import ConversationSession
-from core.config import ConfigError, load_profiles, load_settings
+from core.config import ConfigError, is_placeholder, load_profiles, load_settings
 from core.logging import get_logger, setup_logging
 
 
@@ -28,9 +28,15 @@ def main() -> int:
         default=None,
         help="Profile name to load (defaults to first available)",
     )
+    parser.add_argument(
+        "--log-file",
+        type=Path,
+        default=Path("logs/voicebridge.log"),
+        help="File path for logs (default: logs/voicebridge.log)",
+    )
     args = parser.parse_args()
 
-    setup_logging()
+    setup_logging(enable_file=True, log_file=args.log_file)
     log = get_logger("smoke")
 
     try:
@@ -51,15 +57,17 @@ def main() -> int:
     log.info("Loaded profile '%s' (%d prompts)", profile.name, len(profile.prompts))
     log.info("Session %s ready. Output device: %s", session.session.id, profile.output_device)
 
-    if settings.openai_api_key:
+    if settings.openai_api_key and not is_placeholder(settings.openai_api_key):
         log.info("OpenAI key configured")
     else:
         log.warning("OpenAI key missing; LLM calls will be disabled.")
 
-    if settings.elevenlabs_api_key:
+    if settings.elevenlabs_api_key and not is_placeholder(settings.elevenlabs_api_key):
         log.info("ElevenLabs key configured")
     else:
         log.warning("ElevenLabs key missing; TTS calls will be disabled.")
+
+    log.info("File logging enabled at %s", args.log_file.resolve())
 
     return 0
 

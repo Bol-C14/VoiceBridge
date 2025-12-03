@@ -16,15 +16,20 @@ DEFAULT_SETTINGS_FILE = DEFAULT_CONFIG_DIR / "settings.yml"
 
 @dataclass
 class Settings:
-    openai_api_key: str | None = None
-    elevenlabs_api_key: str | None = None
-    audio_output_device: str | None = None
-    audio_input_device: str | None = None
+    openai_api_key: Any = None
+    elevenlabs_api_key: Any = None
+    audio_output_device: Any = None
+    audio_input_device: Any = None
     extras: Dict[str, Any] = field(default_factory=dict)
 
 
 class ConfigError(Exception):
     """Raised when config files are missing or invalid."""
+
+
+def is_placeholder(value: Any) -> bool:
+    """Return True if the provided value looks like a placeholder."""
+    return isinstance(value, str) and value.strip().upper().startswith("SET_ME")
 
 
 def _load_yaml_file(path: Path) -> Dict[str, Any]:

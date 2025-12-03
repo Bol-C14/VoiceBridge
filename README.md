@@ -4,13 +4,14 @@ Unified “listen → understand → help you think → speak” engine for teac
 
 ## Status
 - Phase 0: core dataclasses, config loader, logging, profile samples, CLI smoke script.
-- Not yet implemented: actual ASR/LLM/TTS calls, audio I/O, agent behaviors.
+- Phase 1: service wrappers for OpenAI LLM/TTS and Whisper ASR, ElevenLabs TTS.
+- Not yet implemented: audio I/O, agent behaviors, full text loop wiring.
 
 ## Quick start (Phase 0)
-- Prereq: Python 3.10+.
+- Prereq: Python 3.9+ (3.10+ recommended).
 - Install deps: `python3 -m pip install -r requirements.txt`
-- Configure: `cp config/settings.example.yml config/settings.yml` and fill API keys/devices (optional at this phase).
-- Smoke test: `python3 cli/smoke.py --profile Teaching` (warns if keys missing; verifies profiles load).
+- Configure: edit `config/settings.yml` with your API keys/devices (file already present with placeholders).
+- Smoke test: `python3 cli/smoke.py --profile Teaching` (warns if keys missing; writes logs to `logs/voicebridge.log` by default).
 
 ## Config
 - Settings: `config/settings.yml` (API keys, default audio devices, extras). Missing file is tolerated during Phase 0.
@@ -30,6 +31,10 @@ Unified “listen → understand → help you think → speak” engine for teac
 - `config/`: settings and profile YAMLs
 - `cli/`: smoke test entrypoint
 - `docs/architecture.md`: full architecture and phase roadmap
+
+## Logging
+- Console logging is always enabled.
+- File logging defaults to `logs/voicebridge.log` (created on demand). Override via `--log-file` on CLI or pass a Path to `setup_logging(enable_file=True, log_file=...)`.
 
 ## Next steps
 - Add concrete service implementations (OpenAI/Whisper/ElevenLabs) and wire to orchestrator.
