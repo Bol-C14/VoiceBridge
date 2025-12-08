@@ -60,7 +60,6 @@ class Orchestrator:
         if not text.strip():
             return
 
-        # Track utterance
         utt = Utterance(
             speaker=self.local_participant,
             text=text.strip(),
@@ -71,14 +70,14 @@ class Orchestrator:
 
         if not self.services.llm or not self.suggestion_engine:
             self.log.warning("LLM service missing; cannot generate suggestions.")
-            return
+            return []
 
         intent = analyze_intent(self.services.llm, self.session)
         suggestions = self.suggestion_engine.generate_suggestions(self.session, intent)
         for s in suggestions:
             self.session.add_suggestion(s)
 
-        # Auto-speak policy
+        # Auto-speak policy (disabled for now; leave logging hook)
         if self.profile.reply_strategy.auto_speak and self.services.tts and suggestions:
             chosen: Suggestion = suggestions[0]
             audio = self.services.tts.synthesize(
@@ -97,3 +96,5 @@ class Orchestrator:
                     len(audio),
                     chosen.text,
                 )
+
+        return suggestions

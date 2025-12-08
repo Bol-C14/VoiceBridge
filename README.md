@@ -17,6 +17,9 @@ Unified “listen → understand → help you think → speak” engine for teac
 - Requires OpenAI key in `config/settings.yml`.
 - Run: `python3 cli/text_loop.py --profile Teaching` then type messages; suggestions are logged, and TTS audio is generated if a TTS backend + key are configured (logged when no audio output backend is set yet).
 
+## Simple text demo (Phase 2)
+- Run: `python3 cli/text_demo.py` (uses Teaching profile by default) and type; prints 1–3 suggestions to console.
+
 ## Config
 - Settings: `config/settings.yml` (API keys, models, default audio devices, extras). Missing file is tolerated during Phase 0.
   - `openai`: `api_key`, `llm.model/params`, `tts.model/params`, `asr.model/language`. Legacy `openai_api_key` is still read.
