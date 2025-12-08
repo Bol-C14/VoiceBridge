@@ -20,6 +20,7 @@ class Settings:
     elevenlabs_api_key: Any = None
     audio_output_device: Any = None
     audio_input_device: Any = None
+    openai: Dict[str, Any] = field(default_factory=dict)
     extras: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -50,19 +51,40 @@ def load_settings(path: Path | None = None, allow_missing: bool = True) -> Setti
         raise ConfigError(f"Settings file not found: {settings_path}")
 
     raw = _load_yaml_file(settings_path)
+    openai_block = raw.get("openai", {}) or {}
+
     known_keys = {
         "openai_api_key",
         "elevenlabs_api_key",
         "audio_output_device",
         "audio_input_device",
+        "openai",
     }
     extras = {k: v for k, v in raw.items() if k not in known_keys}
 
+    openai_api_key = openai_block.get("api_key") or raw.get("openai_api_key")
+
+    # Normalize OpenAI model configs.
+    def _model_cfg(block: Dict[str, Any], default_model: str | None) -> Dict[str, Any]:
+        if not isinstance(block, dict):
+            return {"model": default_model}
+        model = block.get("model", default_model)
+        params = {k: v for k, v in block.items() if k != "model"}
+        return {"model": model, "params": params}
+
+    openai_config = {
+        "api_key": openai_api_key,
+        "llm": _model_cfg(openai_block.get("llm", {}), default_model="gpt-4o-mini"),
+        "tts": _model_cfg(openai_block.get("tts", {}), default_model="gpt-4o-mini-tts"),
+        "asr": _model_cfg(openai_block.get("asr", {}), default_model="whisper-1"),
+    }
+
     return Settings(
-        openai_api_key=raw.get("openai_api_key"),
+        openai_api_key=openai_api_key,
         elevenlabs_api_key=raw.get("elevenlabs_api_key"),
         audio_output_device=raw.get("audio_output_device"),
         audio_input_device=raw.get("audio_input_device"),
+        openai=openai_config,
         extras=extras,
     )
 
