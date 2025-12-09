@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import io
 from typing import Optional, Any
+import logging
+import io
 
-from openai import OpenAI
+from openai import APIError, APITimeoutError, OpenAI
 
 from services.tts_base import TTSService
 
@@ -28,17 +30,27 @@ class OpenAITTSService(TTSService):
         if style:
             params.setdefault("style", style)
 
-        response = self.client.audio.speech.create(
-            model=self.model,
-            voice=voice_id,
-            input=text,
-            **params,
-        )
+        try:
+            response = self.client.audio.speech.create(
+                model=self.model,
+                voice=voice_id,
+                input=text,
+                **params,
+            )
+        except APITimeoutError:
+            self._log().warning("OpenAI TTS timeout; returning empty bytes.")
+            return b""
+        except APIError as exc:
+            self._log().error("OpenAI TTS error: %s", exc)
+            return b""
+
         # The SDK returns a streaming response; read() yields bytes.
         if hasattr(response, "read"):
             return response.read()
-        # Fallback for potential future SDK interfaces.
         buffer = io.BytesIO()
         for chunk in response:
             buffer.write(chunk)
         return buffer.getvalue()
+
+    def _log(self) -> logging.Logger:
+        return logging.getLogger("services.tts_openai")

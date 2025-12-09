@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional
+import logging
 
 import httpx
 
@@ -35,10 +36,22 @@ class ElevenLabsTTSService(TTSService):
             "text": text,
             "model_id": self.model_id,
         }
-        # ElevenLabs accepts an optional "style" knob within voice settings; skip if absent.
         if style:
             payload["voice_settings"] = {"style": style}
 
-        response = self.client.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        return response.content
+        try:
+            response = self.client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            return response.content
+        except httpx.TimeoutException:
+            self._log().warning("ElevenLabs TTS timeout; returning empty bytes.")
+            return b""
+        except httpx.HTTPStatusError as exc:
+            self._log().error("ElevenLabs TTS HTTP error: %s", exc)
+            return b""
+        except Exception as exc:
+            self._log().error("ElevenLabs TTS unexpected error: %s", exc)
+            return b""
+
+    def _log(self) -> logging.Logger:
+        return logging.getLogger("services.tts_elevenlabs")

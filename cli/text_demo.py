@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -8,7 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from core.config import ConfigError, load_profiles, load_settings, get_profile
+from core.config import ConfigError, get_profile, load_profiles, load_settings
 from core.logging import get_logger, setup_logging
 from orchestrator.orchestrator import AudioIOBundle, Orchestrator
 from services.factory import build_services
@@ -41,21 +42,17 @@ def main() -> int:
     else:
         profile = profiles.get("Teaching") or next(iter(profiles.values()))
     services = build_services(settings, profile.tts_backend)
-    # For this text-only demo, do not wire TTS to avoid external TTS calls.
-    if services and getattr(services, "tts", None):
-        log.warning("Disabling TTS for text demo to avoid external API calls.")
-        services.tts = None
 
     orchestrator = Orchestrator(profile=profile, services=services, audio_io=AudioIOBundle())
 
     # If profile requests auto_speak but no TTS API key is configured, disable auto_speak for safety.
     try:
-        tts_key_present = bool(settings.elevenlabs_api_key)
+        tts_key_present = bool(settings.elevenlabs_api_key or settings.openai_api_key or (settings.openai or {}).get("api_key"))
     except Exception:
         tts_key_present = False
     if profile.reply_strategy.auto_speak and services.tts and not tts_key_present:
         log.warning(
-            "Profile requests auto_speak but no ElevenLabs key found; disabling auto_speak for demo."
+            "Profile requests auto_speak but no TTS key found; disabling auto_speak for demo."
         )
         profile.reply_strategy.auto_speak = False
 
@@ -71,12 +68,28 @@ def main() -> int:
             text = input("You> ").strip()
             if text in (":q", ":quit"):
                 break
-            suggestions = orchestrator.handle_local_text(text) or []
+            suggestions = orchestrator.handle_local_text(text, speak=False) or []
             if not suggestions:
                 print("(no suggestions)")
                 continue
+
             for i, s in enumerate(suggestions, 1):
                 print(f"[{i}] {s.text}")
+
+            choice = input(f"Choose [1-{len(suggestions)}] or 's' to skip speaking: ").strip()
+            if choice.lower() == "s":
+                continue
+            if choice == "":
+                choice = "1"
+            try:
+                idx = int(choice) - 1
+                if idx < 0 or idx >= len(suggestions):
+                    print("Invalid choice.")
+                    continue
+                text_to_speak = suggestions[idx].text
+                orchestrator.handle_local_text(text_to_speak, speak=True)
+            except ValueError:
+                print("Invalid input. Skipping.")
     except KeyboardInterrupt:
         print("\nExiting.")
     return 0

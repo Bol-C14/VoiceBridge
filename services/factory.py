@@ -38,6 +38,9 @@ def build_services(settings: Settings, profile_tts_backend: str) -> ServiceBundl
         )
 
     tts = None
+    # voice override: settings.tts_voice_id falls back if profile doesn't supply/if caller wants it
+    tts_voice_id_override = settings.tts_voice_id if settings.tts_voice_id else None
+
     if profile_tts_backend == "elevenlabs" and settings.elevenlabs_api_key and not is_placeholder(
         settings.elevenlabs_api_key
     ):
@@ -63,4 +66,7 @@ def build_services(settings: Settings, profile_tts_backend: str) -> ServiceBundl
             default_params=oa_asr.get("params") or {},
         )
 
-    return ServiceBundle(asr=asr, llm=llm, tts=tts)
+    bundle = ServiceBundle(asr=asr, llm=llm, tts=tts)
+    # Attach voice override for orchestrator to use if present.
+    bundle.tts_voice_id_override = tts_voice_id_override
+    return bundle

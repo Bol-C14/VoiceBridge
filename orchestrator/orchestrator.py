@@ -53,12 +53,13 @@ class Orchestrator:
         _ = audio_chunk
         # Implemented in later phases.
 
-    def handle_local_text(self, text: str) -> None:
+    def handle_local_text(self, text: str, speak: bool = False):
         """
         Minimal text flow used for early smoke tests.
+        If speak=True (or profile.auto_speak), will attempt TTS on the first suggestion.
         """
         if not text.strip():
-            return
+            return []
 
         utt = Utterance(
             speaker=self.local_participant,
@@ -77,11 +78,16 @@ class Orchestrator:
         for s in suggestions:
             self.session.add_suggestion(s)
 
-        # Auto-speak policy (disabled for now; leave logging hook)
-        if self.profile.reply_strategy.auto_speak and self.services.tts and suggestions:
+        # Auto-speak policy (explicit speak flag or profile setting)
+        should_speak = speak or self.profile.reply_strategy.auto_speak
+        if should_speak and self.services.tts and suggestions:
             chosen: Suggestion = suggestions[0]
+            voice_id = (
+                getattr(self.services, "tts_voice_id_override", None)
+                or getattr(self.profile, "default_voice", None)
+            )
             audio = self.services.tts.synthesize(
-                chosen.text, voice_id=self.profile.default_voice
+                chosen.text, voice_id=voice_id or self.profile.default_voice
             )
             if self.audio_io.output and hasattr(self.audio_io.output, "play_to_device"):
                 try:

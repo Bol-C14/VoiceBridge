@@ -21,6 +21,7 @@ class Settings:
     audio_output_device: Any = None
     audio_input_device: Any = None
     openai: Dict[str, Any] = field(default_factory=dict)
+    tts_voice_id: str | None = None
     extras: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -59,6 +60,7 @@ def load_settings(path: Path | None = None, allow_missing: bool = True) -> Setti
         "audio_output_device",
         "audio_input_device",
         "openai",
+        "tts_voice_id",
     }
     extras = {k: v for k, v in raw.items() if k not in known_keys}
 
@@ -84,6 +86,7 @@ def load_settings(path: Path | None = None, allow_missing: bool = True) -> Setti
         elevenlabs_api_key=raw.get("elevenlabs_api_key"),
         audio_output_device=raw.get("audio_output_device"),
         audio_input_device=raw.get("audio_input_device"),
+        tts_voice_id=raw.get("tts_voice_id"),
         openai=openai_config,
         extras=extras,
     )

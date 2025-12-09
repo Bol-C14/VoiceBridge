@@ -588,6 +588,7 @@ voicebridge-core/
 
   * 输入文本 → LLM → 建议 → TTS 播放
   * 已有：`cli/text_loop.py` 支持从 stdin 输入文本，调用 LLM 生成建议，并在有 TTS 配置时生成音频（当前无音频播放后端则记录日志）
+  * 已有：`cli/text_demo.py` 可手动选择候选并触发 TTS 生成（无播放后端则仅记录）
 
 ### Phase 3：引入 Profile 概念
 

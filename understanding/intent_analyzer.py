@@ -10,26 +10,28 @@ from services.llm_base import LLMService
 
 @dataclass
 class IntentResult:
-    intent: str = "other"
+    intent: str = "statement"  # question | statement
     topic: str = ""
-    emotion: str = "neutral"
+    emotion: str = "neutral"  # neutral | confused
     ask_for_clarification: bool = False
 
 
-INTENT_PROMPT = """You are an assistant that classifies the latest user message.
-Return JSON with keys: intent (question/statement/smalltalk/complaint/request_help/other),
-topic (short noun phrase), emotion (neutral/confused/frustrated/happy/serious), ask_for_clarification (true/false)."""
+DEFAULT_INTENT_PROMPT = """You classify the latest user message.
+Return JSON with keys:
+- intent: "question" or "statement"
+- topic: short noun phrase
+- emotion: "neutral" or "confused"
+- ask_for_clarification: true/false
+Be concise and only output JSON."""
 
 
 def _build_messages(session: ConversationSession) -> list[dict[str, str]]:
-    msgs: list[dict[str, str]] = [{"role": "system", "content": INTENT_PROMPT}]
-    for utt in session.get_recent_context(max_turns=6):
-        msgs.append(
-            {
-                "role": "user" if utt.speaker.role == "local_user" else "assistant",
-                "content": utt.text,
-            }
-        )
+    profile_prompt = session.profile.prompts.get("intent", "").strip()
+    system_prompt = profile_prompt or DEFAULT_INTENT_PROMPT
+
+    msgs: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    # Use recent chat history
+    msgs.extend(session.to_chat_history(max_turns=4))
     return msgs
 
 
@@ -46,9 +48,9 @@ def analyze_intent(
         if isinstance(raw, str):
             data = json.loads(raw)
         else:
-            data = raw
+            data = raw or {}
         return IntentResult(
-            intent=str(data.get("intent", "other")),
+            intent=str(data.get("intent", "statement")),
             topic=str(data.get("topic", "")),
             emotion=str(data.get("emotion", "neutral")),
             ask_for_clarification=bool(data.get("ask_for_clarification", False)),
