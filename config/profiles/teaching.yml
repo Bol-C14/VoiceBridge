@@ -3,16 +3,34 @@ input_mode: "manual+asr"
 tts_backend: "elevenlabs"
 default_voice: "shu_teaching"
 output_device: "system_speakers"
+default_action: "explain_concept"
+capabilities:
+  - suggest
+  - explain_concept
+  - explain_last
+  - translate_last
+  - summarize
 reply_strategy:
   auto_suggest: true
   auto_speak: false
+  max_suggestions: 2
   max_suggestion_length: 120
   allow_agent_mode: false
+  allow_humor: false
 prompts:
-  explain: |
-    你是一名耐心的计算机辅导老师，面对的是基础不牢但聪明的学生。
-    用分步骤、类比和例子解释下面的内容，适合直接朗读。
+  intent: |
+    你是课堂助教，判断学生最新一句的意图、主题和困惑程度。
   suggestion: |
     根据下面的对话，为老师生成 2 条候选回答，用口语化、易懂风格。
+    候选回答应引导学生思考或澄清。
+  explain_concept: |
+    你是一名耐心的计算机辅导老师，面对的是基础不牢但聪明的学生。
+    用分步骤、类比和例子解释概念，适合直接朗读。
+  explain_last: |
+    解释对方上一句的意图、关键点与可能的误解，并给出简单示例。
+  translate: |
+    严格翻译对方上一句为中文，保持原意，不扩写。
   summarize: |
-    总结本节对话中出现的关键概念和易错点。
+    总结本节对话中的关键概念、易错点和下一步建议，用要点列表。
+metadata:
+  default_translate_lang: "zh"

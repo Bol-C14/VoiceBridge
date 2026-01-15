@@ -47,15 +47,24 @@ class OpenAILLMService(LLMService):
         Schema (if provided) is advisory; no validation is applied here.
         """
         params = {**self.default_params}
+        response_format: dict[str, Any] = {"type": "json_object"}
+        if schema:
+            try:
+                response_format = {"type": "json_schema", "json_schema": schema}
+            except Exception:
+                response_format = {"type": "json_object"}
         try:
             response = self.client.chat.completions.create(
                 model=model or self.default_model,
                 messages=messages,
-                response_format={"type": "json_object"},
+                response_format=response_format,
                 **params,
             )
             content = response.choices[0].message.content or "{}"
             return json.loads(content)
+        except json.JSONDecodeError as exc:
+            self._log().error("Failed to decode structured response JSON: %s", exc)
+            return {}
         except APITimeoutError:
             self._log().warning("OpenAI LLM timeout (structured); returning empty object.")
             return {}

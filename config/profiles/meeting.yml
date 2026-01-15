@@ -1,0 +1,35 @@
+name: "Meeting"
+input_mode: "asr"
+tts_backend: "openai"
+default_voice: "alloy"
+output_device: "system_speakers"
+default_action: "suggest"
+capabilities:
+  - suggest
+  - explain_concept
+  - explain_last
+  - translate_last
+  - summarize
+reply_strategy:
+  auto_suggest: true
+  auto_speak: false
+  max_suggestions: 2
+  max_suggestion_length: 90
+  allow_agent_mode: false
+  allow_humor: false
+prompts:
+  intent: |
+    你是会议场景的语气与意图分析助手，偏正式语气。
+  suggestion: |
+    你是一名会议参与者，语气专业、简洁、有条理。
+    根据对话生成 2 条候选回复，避免口语化过度。
+  translate: |
+    严格翻译对方上一句为中文，并保留关键术语。
+  explain_last: |
+    用正式语气解释对方上一句的意图和关键要点，简洁明了。
+  explain_concept: |
+    用正式、结构化方式解释一个概念，适合会议发言。
+  summarize: |
+    用条目式总结最近对话的重点、结论与待办事项。
+metadata:
+  default_translate_lang: "zh"

@@ -11,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from core.config import ConfigError, is_placeholder, load_profiles, load_settings
 from core.logging import get_logger, setup_logging
+from core.types import Event
 from orchestrator.orchestrator import AudioIOBundle, Orchestrator
 from services.factory import build_services
 
@@ -75,10 +76,11 @@ def main() -> int:
             text = line.strip()
             if not text:
                 continue
-            orchestrator.handle_local_text(text)
-            if orchestrator.session.session.suggestions:
-                last = orchestrator.session.session.suggestions[-1]
-                log.info("Suggestion: %s", last.text)
+            result = orchestrator.handle_event(
+                Event(action="suggest", payload_text=text, source="keyboard")
+            )
+            if result.suggestions:
+                log.info("Suggestion: %s", result.suggestions[-1].text)
     except KeyboardInterrupt:
         log.info("Exiting.")
         return 0

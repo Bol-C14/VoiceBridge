@@ -14,7 +14,7 @@ class LLMService(ABC):
     @abstractmethod
     def structured(self, messages: list[dict[str, Any]], model: str, schema: Any):
         """
-        Optionally return structured data given a schema (pydantic/dataclass).
+        Return structured data (JSON) given a schema (if provided).
         Implementations may raise NotImplementedError if unsupported.
         """
         raise NotImplementedError

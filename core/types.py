@@ -2,11 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 
 ParticipantRole = Literal["local_user", "remote_user", "agent"]
-UtteranceSource = Literal["mic", "system_audio", "keyboard", "agent"]
+UtteranceSource = Literal["mic", "asr", "system_audio", "keyboard", "agent"]
+EventSource = Literal["keyboard", "asr", "system_audio", "agent"]
+ActionType = Literal[
+    "suggest",
+    "explain_concept",
+    "explain_last",
+    "translate_last",
+    "summarize",
+]
 
 
 @dataclass
@@ -21,8 +29,10 @@ class Participant:
 class ReplyStrategy:
     auto_suggest: bool = True
     auto_speak: bool = False
+    max_suggestions: int = 2
     max_suggestion_length: int = 120
     allow_agent_mode: bool = False
+    allow_humor: bool = True
 
 
 @dataclass
@@ -32,9 +42,11 @@ class Profile:
     tts_backend: str
     default_voice: str
     output_device: str
+    default_action: ActionType = "suggest"
+    capabilities: List[ActionType] = field(default_factory=list)
     reply_strategy: ReplyStrategy
     prompts: Dict[str, str] = field(default_factory=dict)
-    metadata: Dict[str, str] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -49,9 +61,35 @@ class Utterance:
 @dataclass
 class Suggestion:
     text: str
+    tone: Optional[str] = None
+    length: Optional[str] = None
+    risk: Optional[str] = None
+    auto_send: bool = False
     style: Optional[str] = None
     confidence: Optional[float] = None
-    auto_send: bool = False
+
+
+@dataclass
+class Event:
+    action: ActionType
+    payload_text: Optional[str] = None
+    target_lang: Optional[str] = None
+    mode: Optional[str] = None
+    source: EventSource = "keyboard"
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ActionResult:
+    action: ActionType
+    intent: Optional[Any] = None
+    suggestions: List[Suggestion] = field(default_factory=list)
+    translation: Optional[Dict[str, Any]] = None
+    explanation: Optional[Dict[str, Any]] = None
+    summary: Optional[Dict[str, Any]] = None
+    spoken_text: Optional[str] = None
+    error: Optional[str] = None
 
 
 @dataclass
@@ -62,7 +100,7 @@ class Session:
     ended_at: Optional[datetime] = None
     utterances: List[Utterance] = field(default_factory=list)
     suggestions: List[Suggestion] = field(default_factory=list)
-    metadata: Dict[str, str] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     def add_utterance(self, utterance: Utterance) -> None:
         self.utterances.append(utterance)

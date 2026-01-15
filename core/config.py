@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 import yaml
 
-from core.types import Profile, ReplyStrategy
+from core.types import ActionType, Profile, ReplyStrategy
 
 
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
@@ -96,8 +96,10 @@ def _build_reply_strategy(data: Dict[str, Any]) -> ReplyStrategy:
     return ReplyStrategy(
         auto_suggest=bool(data.get("auto_suggest", True)),
         auto_speak=bool(data.get("auto_speak", False)),
+        max_suggestions=int(data.get("max_suggestions", 2)),
         max_suggestion_length=int(data.get("max_suggestion_length", 120)),
         allow_agent_mode=bool(data.get("allow_agent_mode", False)),
+        allow_humor=bool(data.get("allow_humor", True)),
     )
 
 
@@ -107,12 +109,28 @@ def _build_profile(name: str, data: Dict[str, Any]) -> Profile:
         reply_strategy = _build_reply_strategy(reply_strategy_data)
         prompts = data.get("prompts", {}) or {}
         metadata = data.get("metadata", {}) or {}
+        default_action: ActionType = data.get("default_action", "suggest")
+        raw_caps = data.get("capabilities")
+        if raw_caps is None:
+            capabilities = [
+                "suggest",
+                "explain_concept",
+                "explain_last",
+                "translate_last",
+                "summarize",
+            ]
+        elif isinstance(raw_caps, list):
+            capabilities = [str(item) for item in raw_caps]
+        else:
+            capabilities = [str(raw_caps)]
         return Profile(
             name=data.get("name", name),
             input_mode=data["input_mode"],
             tts_backend=data["tts_backend"],
             default_voice=data["default_voice"],
             output_device=data["output_device"],
+            default_action=default_action,
+            capabilities=capabilities,
             reply_strategy=reply_strategy,
             prompts=prompts,
             metadata=metadata,

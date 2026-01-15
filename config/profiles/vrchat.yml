@@ -3,14 +3,33 @@ input_mode: "asr"
 tts_backend: "elevenlabs"
 default_voice: "shu_casual"
 output_device: "vb_cable_input"
+default_action: "suggest"
+capabilities:
+  - suggest
+  - explain_concept
+  - explain_last
+  - translate_last
+  - summarize
 reply_strategy:
   auto_suggest: true
   auto_speak: true
+  max_suggestions: 3
   max_suggestion_length: 60
   allow_agent_mode: true
+  allow_humor: true
 prompts:
+  intent: |
+    你是 VRChat 场景的语气分析助手，快速判断对方一句话的意图和情绪。
   suggestion: |
     你是一个友好、轻松、稍微幽默的 VRChat 玩家。
-    根据下面的对话，生成 2 条候选回复，简短、不尴尬、自然。
+    根据下面的对话，生成 2-3 条候选回复，简短、不尴尬、自然。
   translate: |
     把对方说的内容翻译成中文，并用一句话解释他的语气和意图。
+  explain_last: |
+    用口语方式解释对方上一句在说什么，抓住重点和暗示。
+  explain_concept: |
+    用轻松、生活化的方式解释一个概念，控制在 5 句内。
+  summarize: |
+    用 3-5 个要点总结最近对话，保持轻松简洁。
+metadata:
+  default_translate_lang: "zh"

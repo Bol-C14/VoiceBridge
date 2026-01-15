@@ -18,11 +18,29 @@ class IntentResult:
 
 DEFAULT_INTENT_PROMPT = """You classify the latest user message.
 Return JSON with keys:
-- intent: "question" or "statement"
+- intent: "question" | "statement" | "command" | "feedback" | "other"
 - topic: short noun phrase
-- emotion: "neutral" or "confused"
+- emotion: "neutral" | "confused" | "frustrated"
 - ask_for_clarification: true/false
 Be concise and only output JSON."""
+INTENT_RESPONSE_SCHEMA = {
+    "name": "intent_payload",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "intent": {
+                "type": "string",
+                "enum": ["question", "statement", "command", "feedback", "other"],
+            },
+            "topic": {"type": "string"},
+            "emotion": {"type": "string", "enum": ["neutral", "confused", "frustrated"]},
+            "ask_for_clarification": {"type": "boolean"},
+        },
+        "required": ["intent", "topic", "emotion", "ask_for_clarification"],
+    },
+}
 
 
 def _build_messages(session: ConversationSession) -> list[dict[str, str]]:
@@ -30,6 +48,15 @@ def _build_messages(session: ConversationSession) -> list[dict[str, str]]:
     system_prompt = profile_prompt or DEFAULT_INTENT_PROMPT
 
     msgs: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    msgs.append(
+        {
+            "role": "system",
+            "content": (
+                "Return a JSON object with keys intent, topic, emotion, ask_for_clarification "
+                "and no additional properties."
+            ),
+        }
+    )
     # Use recent chat history
     msgs.extend(session.to_chat_history(max_turns=4))
     return msgs
@@ -44,15 +71,24 @@ def analyze_intent(
 
     msgs = _build_messages(session)
     try:
-        raw = llm.structured(msgs, model=None, schema=None)
+        raw = llm.structured(msgs, model=None, schema=INTENT_RESPONSE_SCHEMA)
         if isinstance(raw, str):
             data = json.loads(raw)
         else:
             data = raw or {}
+
+        intent_val = str(data.get("intent", "statement")).lower()
+        if intent_val not in {"question", "statement", "command", "feedback", "other"}:
+            intent_val = "statement"
+
+        emotion_val = str(data.get("emotion", "neutral")).lower()
+        if emotion_val not in {"neutral", "confused", "frustrated"}:
+            emotion_val = "neutral"
+
         return IntentResult(
-            intent=str(data.get("intent", "statement")),
+            intent=intent_val,
             topic=str(data.get("topic", "")),
-            emotion=str(data.get("emotion", "neutral")),
+            emotion=emotion_val,
             ask_for_clarification=bool(data.get("ask_for_clarification", False)),
         )
     except Exception:
