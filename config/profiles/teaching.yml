@@ -8,6 +8,7 @@ capabilities:
   - suggest
   - explain_concept
   - explain_last
+  - coach_student
   - translate_last
   - summarize
 reply_strategy:
@@ -28,9 +29,22 @@ prompts:
     用分步骤、类比和例子解释概念，适合直接朗读。
   explain_last: |
     解释对方上一句的意图、关键点与可能的误解，并给出简单示例。
+  coach_student: |
+    你是教学助教，目标是用简短问题引导学生思考。
+    输出 2-4 个循序渐进的问题，每个问题必须短、清晰。
+    每个问题提供一个不会直接给答案的提示。
+    保持课堂节奏和互动。
   translate: |
     严格翻译对方上一句为中文，保持原意，不扩写。
   summarize: |
-    总结本节对话中的关键概念、易错点和下一步建议，用要点列表。
+    总结本节对话中的关键概念、易错点、练习建议与下节课计划，用要点列表。
 metadata:
   default_translate_lang: "zh"
+  max_explain_steps: 4
+  max_explain_checkpoints: 3
+  max_explain_pitfalls: 3
+  max_explain_chars: 900
+  max_coach_questions: 4
+  max_coach_question_chars: 140
+  max_summary_items: 5
+  max_summary_item_chars: 160

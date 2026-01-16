@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from typing import Any, Dict
 from uuid import uuid4
 
 from core.types import Profile, Session, Suggestion, Utterance
@@ -95,6 +97,39 @@ class ConversationSession:
                 )
             )
         return "\n".join(lines)
+
+    def export_transcript_jsonl(self, path: Path) -> None:
+        transcript = self.export_transcript(format="jsonl")
+        path.write_text(transcript, encoding="utf-8")
+
+    def export_summary_md(self, path: Path, summary: Dict[str, Any] | str) -> None:
+        if isinstance(summary, dict):
+            summary_text = summary.get("summary_markdown")
+            if not summary_text:
+                summary_text = self._render_summary_md(summary)
+        else:
+            summary_text = str(summary)
+        path.write_text(summary_text or "- No summary available.", encoding="utf-8")
+
+    def _render_summary_md(self, summary: Dict[str, Any]) -> str:
+        sections = [
+            ("Summary", summary.get("summary")),
+            ("Misconceptions", summary.get("misconceptions")),
+            ("Homework", summary.get("homework")),
+            ("Next Session Plan", summary.get("next_session_plan")),
+        ]
+        lines: list[str] = []
+        for title, items in sections:
+            if not items:
+                continue
+            lines.append(f"{title}:")
+            if isinstance(items, list):
+                for item in items:
+                    text = str(item).strip()
+                    if text:
+                        lines.append(f"- {text}")
+            lines.append("")
+        return "\n".join(lines).strip() or "- No summary available."
 
     def to_chat_history(
         self,

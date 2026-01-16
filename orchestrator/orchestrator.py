@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from audio_io import AudioIOBundle, BasicAudioOutput
 from conversation.session_manager import ConversationSession
 from core.storage import LocalFileStorageAdapter, StorageAdapter
 from core.types import (
@@ -16,25 +16,14 @@ from core.types import (
     Utterance,
 )
 from core.logging import get_logger
-from audio_io.basic_output import BasicAudioOutput
+from services import ServiceBundle
 from understanding.explain_concept import ExplainConceptEngine
 from understanding.explain_utterance import ExplainUtteranceEngine
 from understanding.intent_analyzer import analyze_intent
+from understanding.coach_engine import CoachEngine
 from understanding.summarizer import Summarizer
 from understanding.suggestion_engine import SuggestionEngine
 from understanding.translator import TranslateEngine
-
-
-@dataclass
-class ServiceBundle:
-    asr: Any = None
-    llm: Any = None
-    tts: Any = None
-
-
-@dataclass
-class AudioIOBundle:
-    output: Any = None
 
 
 class Orchestrator:
@@ -60,20 +49,19 @@ class Orchestrator:
         self.suggestion_engine = (
             SuggestionEngine(profile, services.llm) if services.llm else None
         )
-        self.translate_engine = (
-            TranslateEngine(profile, services.llm) if services.llm else None
-        )
-        self.explain_utterance_engine = (
-            ExplainUtteranceEngine(profile, services.llm) if services.llm else None
-        )
-        self.explain_concept_engine = (
-            ExplainConceptEngine(profile, services.llm) if services.llm else None
-        )
-        self.summarizer = Summarizer(profile, services.llm) if services.llm else None
+        self.translate_engine = TranslateEngine(profile, services.llm)
+        self.explain_utterance_engine = ExplainUtteranceEngine(profile, services.llm)
+        self.explain_concept_engine = ExplainConceptEngine(profile, services.llm)
+        self.coach_engine = CoachEngine(profile, services.llm)
+        self.summarizer = Summarizer(profile, services.llm)
         self.log = get_logger("orchestrator")
         self.local_participant = Participant(
             id="local", role="local_user", display_name="You"
         )
+        self.remote_participant = Participant(
+            id="remote", role="remote_user", display_name="Student"
+        )
+        self._configure_metrics()
 
     def handle_remote_audio(self, audio_chunk: bytes) -> None:
         """
@@ -127,6 +115,8 @@ class Orchestrator:
             return self._handle_explain_last(event)
         if action == "explain_concept":
             return self._handle_explain_concept(event)
+        if action == "coach_student":
+            return self._handle_coach_student(event)
         if action == "summarize":
             return self._handle_summarize(event)
 
@@ -201,10 +191,15 @@ class Orchestrator:
             "suggest",
             "explain_concept",
             "explain_last",
+            "coach_student",
             "translate_last",
             "summarize",
         }:
             return normalized  # type: ignore[return-value]
+        if normalized == "coach":
+            return "coach_student"
+        if normalized == "summarize_session":
+            return "summarize"
         return "suggest"
 
     def _action_allowed(self, action: ActionType) -> bool:
@@ -267,8 +262,10 @@ class Orchestrator:
         should_speak = bool(event.metadata.get("speak")) or self.profile.reply_strategy.auto_speak
         spoken_text = None
         if should_speak and suggestions:
-            spoken_text = suggestions[0].text
-            self.speak(suggestions[0])
+            chosen = suggestions[0]
+            self.record_choice(chosen, source="auto")
+            spoken_text = chosen.text
+            self.speak(chosen)
 
         return ActionResult(
             action="suggest",
@@ -278,8 +275,6 @@ class Orchestrator:
         )
 
     def _handle_translate_last(self, event: Event) -> ActionResult:
-        if not self.translate_engine:
-            return ActionResult(action="translate_last", error="LLM service missing.")
         last = self.session.select_last_utterance("remote_user")
         if not last:
             return ActionResult(
@@ -301,8 +296,6 @@ class Orchestrator:
         return ActionResult(action="translate_last", translation=translation)
 
     def _handle_explain_last(self, event: Event) -> ActionResult:
-        if not self.explain_utterance_engine:
-            return ActionResult(action="explain_last", error="LLM service missing.")
         last = self.session.select_last_utterance("remote_user")
         if not last:
             return ActionResult(
@@ -319,13 +312,12 @@ class Orchestrator:
         return ActionResult(action="explain_last", explanation=explanation)
 
     def _handle_explain_concept(self, event: Event) -> ActionResult:
-        if not self.explain_concept_engine:
-            return ActionResult(action="explain_concept", error="LLM service missing.")
         if not event.payload_text:
             return ActionResult(
                 action="explain_concept", error="No concept provided to explain."
             )
         explanation = self.explain_concept_engine.explain(event.payload_text)
+        spoken_text = self._build_explain_spoken_text(explanation)
         self._append_event_log(
             {
                 "type": "explanation",
@@ -333,14 +325,57 @@ class Orchestrator:
                 "explanation": explanation,
             }
         )
-        return ActionResult(action="explain_concept", explanation=explanation)
+        if event.metadata.get("speak") and spoken_text:
+            self.speak(spoken_text)
+        return ActionResult(
+            action="explain_concept",
+            explanation=explanation,
+            spoken_text=spoken_text,
+        )
+
+    def _handle_coach_student(self, event: Event) -> ActionResult:
+        if not event.payload_text:
+            return ActionResult(
+                action="coach_student", error="No student message provided."
+            )
+
+        utt = Utterance(
+            speaker=self.remote_participant,
+            text=event.payload_text.strip(),
+            source=event.source,
+            language=None,
+        )
+        self.session.add_utterance(utt)
+        self._append_event_log(
+            {
+                "type": "utterance",
+                "timestamp": utt.timestamp.isoformat(),
+                "role": utt.speaker.role,
+                "text": utt.text,
+                "source": utt.source,
+            }
+        )
+
+        coach = self.coach_engine.generate_coaching(self.session, utt.text)
+        self._append_event_log(
+            {
+                "type": "coach",
+                "timestamp": datetime.utcnow().isoformat(),
+                "coach": coach,
+            }
+        )
+
+        spoken_text = None
+        if event.metadata.get("speak"):
+            questions = coach.get("questions") if isinstance(coach, dict) else None
+            if isinstance(questions, list) and questions:
+                spoken_text = str(questions[0].get("q") or "").strip()
+            if spoken_text:
+                self.speak(spoken_text)
+
+        return ActionResult(action="coach_student", coach=coach, spoken_text=spoken_text)
 
     def _handle_summarize(self, event: Event) -> ActionResult:
-        if not self.summarizer:
-            return ActionResult(
-                action="summarize",
-                error="LLM service missing; cannot summarize.",
-            )
         max_turns = int(event.metadata.get("max_turns", 12))
         summary = self.summarizer.summarize(self.session, max_turns=max_turns)
         self.session.session.metadata["rolling_summary"] = summary.get("summary_markdown", "")
@@ -355,6 +390,71 @@ class Orchestrator:
             }
         )
         return ActionResult(action="summarize", summary=summary)
+
+    def _build_explain_spoken_text(self, explanation: dict[str, Any]) -> str:
+        max_chars = int(
+            self.profile.metadata.get(
+                "max_explain_chars",
+                self.profile.metadata.get("max_explain_text_chars", 900),
+            )
+        )
+        parts: list[str] = []
+        title = explanation.get("title")
+        if isinstance(title, str) and title.strip():
+            parts.append(title.strip())
+        one_liner = explanation.get("one_liner")
+        if isinstance(one_liner, str) and one_liner.strip():
+            parts.append(one_liner.strip())
+        steps = explanation.get("steps")
+        if isinstance(steps, list):
+            for step in steps:
+                if not isinstance(step, dict):
+                    continue
+                say = step.get("say")
+                if isinstance(say, str) and say.strip():
+                    parts.append(say.strip())
+        example = explanation.get("example")
+        if isinstance(example, str) and example.strip():
+            parts.append(example.strip())
+        checkpoints = explanation.get("checkpoints")
+        if isinstance(checkpoints, list) and checkpoints:
+            joined = "; ".join([str(item) for item in checkpoints if str(item).strip()])
+            if joined:
+                parts.append(joined)
+        spoken = "\n".join(parts).strip()
+        if max_chars and len(spoken) > max_chars:
+            spoken = spoken[:max_chars].rstrip()
+        return spoken
+
+    def _configure_metrics(self) -> None:
+        def _hook(payload: dict[str, Any]) -> None:
+            event = {
+                "type": "metrics",
+                "timestamp": datetime.utcnow().isoformat(),
+                **payload,
+            }
+            self._append_event_log(event)
+
+        for service in (self.services.llm, self.services.tts):
+            if service is None:
+                continue
+            try:
+                service.metrics_hook = _hook
+            except Exception:
+                self.log.debug("Failed to attach metrics hook.", exc_info=True)
+
+    def record_choice(self, suggestion: Suggestion, source: str = "manual") -> None:
+        """
+        Log a suggestion choice without mutating session state.
+        """
+        self._append_event_log(
+            {
+                "type": "chosen",
+                "timestamp": datetime.utcnow().isoformat(),
+                "source": source,
+                "suggestion": self._suggestion_to_dict(suggestion),
+            }
+        )
 
     def _append_event_log(self, payload: dict[str, Any]) -> None:
         if not self.storage:

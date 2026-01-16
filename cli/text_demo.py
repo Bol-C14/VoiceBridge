@@ -13,7 +13,8 @@ if str(PROJECT_ROOT) not in sys.path:
 from core.config import ConfigError, get_profile, load_profiles, load_settings
 from core.logging import get_logger, setup_logging
 from core.types import ActionResult, Event
-from orchestrator.orchestrator import AudioIOBundle, Orchestrator
+from audio_io import AudioIOBundle
+from orchestrator.orchestrator import Orchestrator
 from services.factory import build_services
 
 
@@ -64,7 +65,10 @@ def main() -> int:
 
     print(f"Profile: {profile.name}")
     print("Enter text (':q' to quit)")
-    print("Commands: /suggest, /explain <text|last>, /translate last to <lang>, /summarize [N], /export")
+    print(
+        "Commands: /suggest, /explain <text|last>, /coach <text>, "
+        "/translate last to <lang>, /summarize [N], /export"
+    )
 
     try:
         while True:
@@ -114,6 +118,11 @@ def parse_command(text: str, profile) -> tuple[Event | None, str | None, str | N
         if not payload:
             return None, None, "Usage: /explain <text> or /explain last"
         return Event(action="explain_concept", payload_text=payload, source="keyboard"), None, None
+    if cmd == "/coach":
+        payload = " ".join(args).strip()
+        if not payload:
+            return None, None, "Usage: /coach <student message>"
+        return Event(action="coach_student", payload_text=payload, source="keyboard"), None, None
     if cmd == "/translate":
         if not args or args[0].lower() != "last":
             return None, None, "Usage: /translate last to <lang>"
@@ -150,6 +159,9 @@ def render_result(result: ActionResult, orchestrator: Orchestrator) -> None:
             risk = s.risk or "low"
             print(f"[{i}][{tone}][{length}][{risk}] {s.text}")
 
+        if result.spoken_text:
+            return
+
         choice = input(
             f"Choose [1-{len(result.suggestions)}] or 's' to skip speaking: "
         ).strip()
@@ -162,7 +174,9 @@ def render_result(result: ActionResult, orchestrator: Orchestrator) -> None:
             if idx < 0 or idx >= len(result.suggestions):
                 print("Invalid choice.")
                 return
-            orchestrator.speak(result.suggestions[idx])
+            suggestion = result.suggestions[idx]
+            orchestrator.record_choice(suggestion, source="manual")
+            orchestrator.speak(suggestion)
         except ValueError:
             print("Invalid input. Skipping.")
         return
@@ -172,6 +186,42 @@ def render_result(result: ActionResult, orchestrator: Orchestrator) -> None:
         return
     if result.explanation:
         print(json.dumps(result.explanation, ensure_ascii=False, indent=2))
+        return
+    if result.coach:
+        coach = result.coach
+        goal = coach.get("goal") if isinstance(coach, dict) else None
+        if goal:
+            print(f"Goal: {goal}")
+        questions = coach.get("questions") if isinstance(coach, dict) else None
+        if isinstance(questions, list) and questions:
+            for i, q in enumerate(questions, 1):
+                text = q.get("q") if isinstance(q, dict) else None
+                hint = q.get("hint") if isinstance(q, dict) else None
+                if text:
+                    print(f"[{i}] {text}")
+                if hint:
+                    print(f"  hint: {hint}")
+
+            if result.spoken_text:
+                return
+
+            choice = input(
+                f"Speak question [1-{len(questions)}] or 's' to skip: "
+            ).strip()
+            if choice.lower() == "s":
+                return
+            if choice == "":
+                choice = "1"
+            try:
+                idx = int(choice) - 1
+                if idx < 0 or idx >= len(questions):
+                    print("Invalid choice.")
+                    return
+                q_text = questions[idx].get("q") if isinstance(questions[idx], dict) else None
+                if q_text:
+                    orchestrator.speak(q_text)
+            except ValueError:
+                print("Invalid input. Skipping.")
         return
     if result.summary:
         summary_text = result.summary.get("summary_markdown") if isinstance(result.summary, dict) else None
@@ -185,25 +235,40 @@ def render_result(result: ActionResult, orchestrator: Orchestrator) -> None:
 
 
 def export_session(orchestrator: Orchestrator) -> None:
+    log = get_logger("text_demo")
     logs_dir = Path("logs")
     logs_dir.mkdir(parents=True, exist_ok=True)
     session_id = orchestrator.session.session.id
     transcript_path = logs_dir / f"{session_id}_transcript.jsonl"
     summary_path = logs_dir / f"{session_id}_summary.md"
 
-    transcript = orchestrator.session.export_transcript(format="jsonl")
-    transcript_path.write_text(transcript, encoding="utf-8")
+    try:
+        orchestrator.session.export_transcript_jsonl(transcript_path)
+    except OSError as exc:
+        log.warning("Failed to write transcript to %s: %s", transcript_path, exc)
+        return
 
+    summary_payload = None
     summary_text = orchestrator.session.session.metadata.get("rolling_summary")
-    if not summary_text and orchestrator.summarizer:
+    if not summary_text:
         result = orchestrator.handle_event(Event(action="summarize", source="keyboard"))
         if result.summary and isinstance(result.summary, dict):
+            summary_payload = result.summary
             summary_text = result.summary.get("summary_markdown", "")
     if not summary_text:
         summary_text = "- No summary available."
-    summary_path.write_text(summary_text, encoding="utf-8")
+    try:
+        orchestrator.session.export_summary_md(
+            summary_path, summary_payload or summary_text
+        )
+    except OSError as exc:
+        log.warning("Failed to write summary to %s: %s", summary_path, exc)
+        return
 
-    orchestrator.storage.save_session(orchestrator.session.session)
+    try:
+        orchestrator.storage.save_session(orchestrator.session.session)
+    except OSError as exc:
+        log.warning("Failed to save session snapshot: %s", exc)
     print(f"Exported: {transcript_path} and {summary_path}")
 
 

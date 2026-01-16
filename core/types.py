@@ -12,6 +12,7 @@ ActionType = Literal[
     "suggest",
     "explain_concept",
     "explain_last",
+    "coach_student",
     "translate_last",
     "summarize",
 ]
@@ -42,9 +43,9 @@ class Profile:
     tts_backend: str
     default_voice: str
     output_device: str
+    reply_strategy: ReplyStrategy = field(default_factory=ReplyStrategy)
     default_action: ActionType = "suggest"
     capabilities: List[ActionType] = field(default_factory=list)
-    reply_strategy: ReplyStrategy
     prompts: Dict[str, str] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -87,6 +88,7 @@ class ActionResult:
     suggestions: List[Suggestion] = field(default_factory=list)
     translation: Optional[Dict[str, Any]] = None
     explanation: Optional[Dict[str, Any]] = None
+    coach: Optional[Dict[str, Any]] = None
     summary: Optional[Dict[str, Any]] = None
     spoken_text: Optional[str] = None
     error: Optional[str] = None

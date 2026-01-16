@@ -12,7 +12,8 @@ if str(PROJECT_ROOT) not in sys.path:
 from core.config import ConfigError, is_placeholder, load_profiles, load_settings
 from core.logging import get_logger, setup_logging
 from core.types import Event
-from orchestrator.orchestrator import AudioIOBundle, Orchestrator
+from audio_io import AudioIOBundle
+from orchestrator.orchestrator import Orchestrator
 from services.factory import build_services
 
 

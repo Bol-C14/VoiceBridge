@@ -116,6 +116,7 @@ def _build_profile(name: str, data: Dict[str, Any]) -> Profile:
                 "suggest",
                 "explain_concept",
                 "explain_last",
+                "coach_student",
                 "translate_last",
                 "summarize",
             ]
