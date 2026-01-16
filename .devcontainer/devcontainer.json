@@ -1,0 +1,29 @@
+{
+  "name": "VoiceBridge Dev",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspaces/VoiceBridge",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/VoiceBridge,type=bind,consistency=cached",
+
+  "remoteUser": "vscode",
+
+  "containerEnv": {
+    "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}"
+  },
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.analysis.typeCheckingMode": "basic",
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  }
+}
