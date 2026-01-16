@@ -102,3 +102,20 @@ def test_capability_denies_action():
     )
     result = orchestrator.handle_event(Event(action="summarize", source="keyboard"))
     assert result.error
+
+
+def test_add_utterance_records_remote():
+    profile = _build_profile()
+    services = ServiceBundle(llm=None, tts=None, asr=None)
+    orchestrator = Orchestrator(
+        profile=profile, services=services, audio_io=AudioIOBundle(), storage=DummyStorage()
+    )
+    orchestrator.handle_event(
+        Event(
+            action="add_utterance",
+            payload_text="hello",
+            speaker_role="remote_user",
+            source="keyboard",
+        )
+    )
+    assert orchestrator.session.session.utterances[-1].speaker.role == "remote_user"

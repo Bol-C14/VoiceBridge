@@ -73,8 +73,17 @@ class ExplainConceptEngine:
         return textwrap.shorten(text, width=max_chars, placeholder="...")
 
     def _sanitize_steps(self, steps: Any) -> List[Dict[str, Any]]:
-        max_steps = int(self.profile.metadata.get("max_explain_steps", 4))
-        max_step_chars = int(self.profile.metadata.get("max_explain_step_chars", 220))
+        max_steps = int(
+            self.profile.constraints.get(
+                "max_explain_steps", self.profile.metadata.get("max_explain_steps", 4)
+            )
+        )
+        max_step_chars = int(
+            self.profile.constraints.get(
+                "max_explain_step_chars",
+                self.profile.metadata.get("max_explain_step_chars", 220),
+            )
+        )
         cleaned: List[Dict[str, Any]] = []
         if not isinstance(steps, list):
             return cleaned
@@ -106,12 +115,25 @@ class ExplainConceptEngine:
         return cleaned
 
     def _sanitize_payload(self, payload: Any, topic: str) -> Dict[str, Any]:
-        max_checkpoints = int(self.profile.metadata.get("max_explain_checkpoints", 3))
-        max_pitfalls = int(self.profile.metadata.get("max_explain_pitfalls", 3))
+        max_checkpoints = int(
+            self.profile.constraints.get(
+                "max_explain_checkpoints",
+                self.profile.metadata.get("max_explain_checkpoints", 3),
+            )
+        )
+        max_pitfalls = int(
+            self.profile.constraints.get(
+                "max_explain_pitfalls",
+                self.profile.metadata.get("max_explain_pitfalls", 3),
+            )
+        )
         max_text = int(
-            self.profile.metadata.get(
+            self.profile.constraints.get(
                 "max_explain_text_chars",
-                self.profile.metadata.get("max_explain_chars", 300),
+                self.profile.metadata.get(
+                    "max_explain_text_chars",
+                    self.profile.metadata.get("max_explain_chars", 300),
+                ),
             )
         )
 

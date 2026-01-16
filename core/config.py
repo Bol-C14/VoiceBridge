@@ -108,6 +108,7 @@ def _build_profile(name: str, data: Dict[str, Any]) -> Profile:
         reply_strategy_data = data.get("reply_strategy", {}) or {}
         reply_strategy = _build_reply_strategy(reply_strategy_data)
         prompts = data.get("prompts", {}) or {}
+        constraints = data.get("constraints", {}) or {}
         metadata = data.get("metadata", {}) or {}
         default_action: ActionType = data.get("default_action", "suggest")
         raw_caps = data.get("capabilities")
@@ -124,6 +125,11 @@ def _build_profile(name: str, data: Dict[str, Any]) -> Profile:
             capabilities = [str(item) for item in raw_caps]
         else:
             capabilities = [str(raw_caps)]
+        if "max_suggestions" in constraints:
+            try:
+                reply_strategy.max_suggestions = int(constraints["max_suggestions"])
+            except (TypeError, ValueError):
+                pass
         return Profile(
             name=data.get("name", name),
             input_mode=data["input_mode"],
@@ -133,6 +139,7 @@ def _build_profile(name: str, data: Dict[str, Any]) -> Profile:
             default_action=default_action,
             capabilities=capabilities,
             reply_strategy=reply_strategy,
+            constraints=constraints,
             prompts=prompts,
             metadata=metadata,
         )

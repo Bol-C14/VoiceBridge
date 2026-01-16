@@ -68,8 +68,17 @@ class CoachEngine:
         student_text: str,
     ) -> list[dict[str, str]]:
         prompt = self.profile.prompts.get("coach_student", "").strip()
-        max_questions = int(self.profile.metadata.get("max_coach_questions", 4))
-        max_question_chars = int(self.profile.metadata.get("max_coach_question_chars", 140))
+        max_questions = int(
+            self.profile.constraints.get(
+                "max_questions", self.profile.metadata.get("max_coach_questions", 4)
+            )
+        )
+        max_question_chars = int(
+            self.profile.constraints.get(
+                "max_question_chars", self.profile.metadata.get("max_coach_question_chars", 140)
+            )
+        )
+        no_spoilers = bool(self.profile.constraints.get("no_spoilers", False))
 
         messages = [{"role": "system", "content": COACH_SYSTEM_PROMPT}]
         if prompt:
@@ -80,10 +89,17 @@ class CoachEngine:
                 "content": (
                     f"Provide {max_questions} or fewer short questions. "
                     f"Each question must be under {max_question_chars} characters. "
-                    "Hints must not give away the answer."
-                ),
-            }
+                "Hints must not give away the answer."
+            ),
+        }
         )
+        if no_spoilers:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": "Do not reveal the answer directly; keep hints high-level.",
+                }
+            )
         transcript = self._context_transcript(session)
         if transcript:
             messages.append({"role": "system", "content": f"Context:\n{transcript}"})
@@ -102,9 +118,22 @@ class CoachEngine:
         return textwrap.shorten(text, width=max_chars, placeholder="...")
 
     def _sanitize_questions(self, items: Any) -> List[Dict[str, str]]:
-        max_questions = int(self.profile.metadata.get("max_coach_questions", 4))
-        max_question_chars = int(self.profile.metadata.get("max_coach_question_chars", 140))
-        max_hint_chars = int(self.profile.metadata.get("max_coach_hint_chars", 180))
+        max_questions = int(
+            self.profile.constraints.get(
+                "max_questions", self.profile.metadata.get("max_coach_questions", 4)
+            )
+        )
+        max_question_chars = int(
+            self.profile.constraints.get(
+                "max_question_chars", self.profile.metadata.get("max_coach_question_chars", 140)
+            )
+        )
+        max_hint_chars = int(
+            self.profile.constraints.get(
+                "max_hint_chars", self.profile.metadata.get("max_coach_hint_chars", 180)
+            )
+        )
+        no_spoilers = bool(self.profile.constraints.get("no_spoilers", False))
 
         questions: List[Dict[str, str]] = []
         if not isinstance(items, list):
@@ -118,6 +147,8 @@ class CoachEngine:
             expected = self._coerce_text(item.get("expected", ""))
             hint = self._coerce_text(item.get("hint", ""))
             q = self._limit_text(q, max_question_chars)
+            if no_spoilers:
+                expected = "Student explains their reasoning."
             expected = self._limit_text(expected, max_question_chars)
             hint = self._limit_text(hint, max_hint_chars)
             questions.append({"q": q, "expected": expected, "hint": hint})
@@ -153,9 +184,14 @@ class CoachEngine:
                 {
                     "q": self._limit_text(
                         f"Can you restate the problem in your own words?",
-                        int(self.profile.metadata.get("max_coach_question_chars", 140)),
+                        int(
+                            self.profile.constraints.get(
+                                "max_question_chars",
+                                self.profile.metadata.get("max_coach_question_chars", 140),
+                            )
+                        ),
                     ),
-                    "expected": "",
+                    "expected": "Student restates the problem clearly.",
                     "hint": "Focus on what the input and output should be.",
                 }
             ]

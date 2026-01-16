@@ -9,11 +9,13 @@ ParticipantRole = Literal["local_user", "remote_user", "agent"]
 UtteranceSource = Literal["mic", "asr", "system_audio", "keyboard", "agent"]
 EventSource = Literal["keyboard", "asr", "system_audio", "agent"]
 ActionType = Literal[
+    "add_utterance",
     "suggest",
     "explain_concept",
     "explain_last",
     "coach_student",
     "translate_last",
+    "summarize_session",
     "summarize",
 ]
 
@@ -44,6 +46,7 @@ class Profile:
     default_voice: str
     output_device: str
     reply_strategy: ReplyStrategy = field(default_factory=ReplyStrategy)
+    constraints: Dict[str, Any] = field(default_factory=dict)
     default_action: ActionType = "suggest"
     capabilities: List[ActionType] = field(default_factory=list)
     prompts: Dict[str, str] = field(default_factory=dict)
@@ -75,6 +78,8 @@ class Event:
     action: ActionType
     payload_text: Optional[str] = None
     target_lang: Optional[str] = None
+    speaker_role: Optional[ParticipantRole] = None
+    speaker_name: Optional[str] = None
     mode: Optional[str] = None
     source: EventSource = "keyboard"
     timestamp: datetime = field(default_factory=datetime.utcnow)

@@ -3,14 +3,14 @@ input_mode: "manual+asr"
 tts_backend: "elevenlabs"
 default_voice: "shu_teaching"
 output_device: "system_speakers"
-default_action: "explain_concept"
+default_action: "coach_student"
 capabilities:
   - suggest
   - explain_concept
   - explain_last
   - coach_student
   - translate_last
-  - summarize
+  - summarize_session
 reply_strategy:
   auto_suggest: true
   auto_speak: false
@@ -38,13 +38,19 @@ prompts:
     严格翻译对方上一句为中文，保持原意，不扩写。
   summarize: |
     总结本节对话中的关键概念、易错点、练习建议与下节课计划，用要点列表。
+  summarize_session: |
+    生成可交付的课后复盘：要点、易错点、练习建议、下节课计划。
 metadata:
   default_translate_lang: "zh"
   max_explain_steps: 4
   max_explain_checkpoints: 3
   max_explain_pitfalls: 3
   max_explain_chars: 900
-  max_coach_questions: 4
   max_coach_question_chars: 140
   max_summary_items: 5
   max_summary_item_chars: 160
+constraints:
+  max_explain_chars: 900
+  max_questions: 4
+  max_suggestions: 2
+  no_spoilers: true

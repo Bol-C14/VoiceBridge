@@ -102,6 +102,8 @@ class Orchestrator:
                 "action": action,
                 "payload_text": event.payload_text,
                 "target_lang": event.target_lang,
+                "speaker_role": event.speaker_role,
+                "speaker_name": event.speaker_name,
                 "source": event.source,
                 "metadata": event.metadata,
             }
@@ -109,6 +111,8 @@ class Orchestrator:
 
         if action == "suggest":
             return self._handle_suggest(event)
+        if action == "add_utterance":
+            return self._handle_add_utterance(event)
         if action == "translate_last":
             return self._handle_translate_last(event)
         if action == "explain_last":
@@ -188,6 +192,7 @@ class Orchestrator:
     def _normalize_action(self, action: ActionType | str) -> ActionType:
         normalized = str(action).lower()
         if normalized in {
+            "add_utterance",
             "suggest",
             "explain_concept",
             "explain_last",
@@ -203,9 +208,15 @@ class Orchestrator:
         return "suggest"
 
     def _action_allowed(self, action: ActionType) -> bool:
+        if action == "add_utterance":
+            return True
         if not self.profile.capabilities:
             return True
-        return action in self.profile.capabilities
+        if action in self.profile.capabilities:
+            return True
+        if action == "summarize" and "summarize_session" in self.profile.capabilities:
+            return True
+        return False
 
     def _handle_suggest(self, event: Event) -> ActionResult:
         if not event.payload_text:
@@ -273,6 +284,17 @@ class Orchestrator:
             suggestions=suggestions,
             spoken_text=spoken_text,
         )
+
+    def _handle_add_utterance(self, event: Event) -> ActionResult:
+        if not event.payload_text:
+            return ActionResult(action="add_utterance", error="No text provided.")
+        self.add_utterance(
+            event.payload_text,
+            speaker_role=event.speaker_role or "remote_user",
+            source=event.source,
+            speaker_name=event.speaker_name,
+        )
+        return ActionResult(action="add_utterance")
 
     def _handle_translate_last(self, event: Event) -> ActionResult:
         last = self.session.select_last_utterance("remote_user")
@@ -393,9 +415,12 @@ class Orchestrator:
 
     def _build_explain_spoken_text(self, explanation: dict[str, Any]) -> str:
         max_chars = int(
-            self.profile.metadata.get(
+            self.profile.constraints.get(
                 "max_explain_chars",
-                self.profile.metadata.get("max_explain_text_chars", 900),
+                self.profile.metadata.get(
+                    "max_explain_chars",
+                    self.profile.metadata.get("max_explain_text_chars", 900),
+                ),
             )
         )
         parts: list[str] = []
@@ -455,6 +480,42 @@ class Orchestrator:
                 "suggestion": self._suggestion_to_dict(suggestion),
             }
         )
+
+    def add_utterance(
+        self,
+        text: str,
+        speaker_role: str = "remote_user",
+        source: str = "keyboard",
+        speaker_name: str | None = None,
+    ) -> Utterance:
+        role = str(speaker_role).strip() or "remote_user"
+        speaker = self.remote_participant
+        if role == "local_user":
+            speaker = self.local_participant
+        elif role == "agent":
+            speaker = Participant(id="agent", role="agent", display_name="Agent")
+        if speaker_name:
+            speaker = Participant(
+                id=speaker.id, role=speaker.role, display_name=speaker_name
+            )
+
+        utt = Utterance(
+            speaker=speaker,
+            text=text.strip(),
+            source=source,  # type: ignore[arg-type]
+            language=None,
+        )
+        self.session.add_utterance(utt)
+        self._append_event_log(
+            {
+                "type": "utterance",
+                "timestamp": utt.timestamp.isoformat(),
+                "role": utt.speaker.role,
+                "text": utt.text,
+                "source": utt.source,
+            }
+        )
+        return utt
 
     def _append_event_log(self, payload: dict[str, Any]) -> None:
         if not self.storage:

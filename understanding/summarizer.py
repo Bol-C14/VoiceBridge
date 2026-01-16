@@ -34,7 +34,10 @@ class Summarizer:
         self.llm = llm
 
     def _build_messages(self, transcript: str) -> list[dict[str, str]]:
-        prompt = self.profile.prompts.get("summarize", "").strip()
+        prompt = (
+            self.profile.prompts.get("summarize_session", "").strip()
+            or self.profile.prompts.get("summarize", "").strip()
+        )
         messages = [{"role": "system", "content": SUMMARY_PROMPT}]
         if prompt:
             messages.append({"role": "system", "content": prompt})
@@ -105,8 +108,17 @@ class Summarizer:
             }
         messages = self._build_messages(transcript)
         payload = self.llm.structured(messages, model=None, schema=SUMMARY_SCHEMA)
-        max_items = int(self.profile.metadata.get("max_summary_items", 5))
-        max_chars = int(self.profile.metadata.get("max_summary_item_chars", 160))
+        max_items = int(
+            self.profile.constraints.get(
+                "max_summary_items", self.profile.metadata.get("max_summary_items", 5)
+            )
+        )
+        max_chars = int(
+            self.profile.constraints.get(
+                "max_summary_item_chars",
+                self.profile.metadata.get("max_summary_item_chars", 160),
+            )
+        )
         if isinstance(payload, dict) and payload.get("summary"):
             cleaned = {
                 "summary": self._sanitize_list(payload.get("summary"), max_items, max_chars),

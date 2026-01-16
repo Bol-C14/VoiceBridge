@@ -66,7 +66,7 @@ def main() -> int:
     print(f"Profile: {profile.name}")
     print("Enter text (':q' to quit)")
     print(
-        "Commands: /suggest, /explain <text|last>, /coach <text>, "
+        "Commands: /suggest, /explain <text|last>, /coach <text>, /student <text>, "
         "/translate last to <lang>, /summarize [N], /export"
     )
 
@@ -118,6 +118,21 @@ def parse_command(text: str, profile) -> tuple[Event | None, str | None, str | N
         if not payload:
             return None, None, "Usage: /explain <text> or /explain last"
         return Event(action="explain_concept", payload_text=payload, source="keyboard"), None, None
+    if cmd in {"/student", "/stu"}:
+        payload = " ".join(args).strip()
+        if not payload:
+            return None, None, "Usage: /student <text>"
+        return (
+            Event(
+                action="add_utterance",
+                payload_text=payload,
+                speaker_role="remote_user",
+                speaker_name="Student",
+                source="keyboard",
+            ),
+            None,
+            None,
+        )
     if cmd == "/coach":
         payload = " ".join(args).strip()
         if not payload:
@@ -150,6 +165,8 @@ def parse_command(text: str, profile) -> tuple[Event | None, str | None, str | N
 def render_result(result: ActionResult, orchestrator: Orchestrator) -> None:
     if result.error:
         print(f"(error) {result.error}")
+        return
+    if result.action == "add_utterance":
         return
 
     if result.suggestions:
