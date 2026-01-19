@@ -32,6 +32,7 @@ class Summarizer:
     def __init__(self, profile: Profile, llm: LLMService):
         self.profile = profile
         self.llm = llm
+        self.last_meta: Dict[str, Any] = {}
 
     def _build_messages(self, transcript: str) -> list[dict[str, str]]:
         prompt = (
@@ -73,39 +74,47 @@ class Summarizer:
 
     def _render_summary_markdown(self, payload: Dict[str, Any]) -> str:
         sections = [
-            ("Summary", payload.get("summary")),
+            ("Key Points", payload.get("summary")),
             ("Misconceptions", payload.get("misconceptions")),
             ("Homework", payload.get("homework")),
             ("Next Session Plan", payload.get("next_session_plan")),
         ]
         lines: List[str] = []
         for title, items in sections:
-            if not items:
-                continue
             lines.append(f"{title}:")
-            for item in items:
-                lines.append(f"- {item}")
+            if isinstance(items, list) and items:
+                for item in items:
+                    lines.append(f"- {item}")
+            else:
+                lines.append("- (none)")
             lines.append("")
         return "\n".join(lines).strip() or "- No summary available."
 
-    def summarize(self, session: ConversationSession, max_turns: int = 12) -> Dict[str, Any]:
+    def summarize(self, session: ConversationSession, max_turns: int = 30) -> Dict[str, Any]:
+        self.last_meta = {"structured_ok": False, "fallback_used": False}
         if not self.llm:
-            return {
+            self.last_meta["fallback_used"] = True
+            payload = {
                 "summary": ["LLM not configured; summary unavailable."],
                 "misconceptions": [],
                 "homework": [],
                 "next_session_plan": [],
                 "summary_markdown": "- LLM not configured; summary unavailable.",
             }
+            self.last_meta["output_chars"] = len(str(payload))
+            return payload
         transcript = self._build_transcript(session, max_turns=max_turns)
         if not transcript.strip():
-            return {
+            self.last_meta["fallback_used"] = True
+            payload = {
                 "summary": ["No conversation to summarize."],
                 "misconceptions": [],
                 "homework": [],
                 "next_session_plan": [],
                 "summary_markdown": "- No conversation to summarize.",
             }
+            self.last_meta["output_chars"] = len(str(payload))
+            return payload
         messages = self._build_messages(transcript)
         payload = self.llm.structured(messages, model=None, schema=SUMMARY_SCHEMA)
         max_items = int(
@@ -133,8 +142,11 @@ class Summarizer:
                 ),
             }
             cleaned["summary_markdown"] = self._render_summary_markdown(cleaned)
+            self.last_meta["structured_ok"] = True
+            self.last_meta["output_chars"] = len(str(cleaned))
             return cleaned
         raw = self.llm.complete(messages, model=None)
+        self.last_meta["fallback_used"] = True
         fallback = {
             "summary": [raw or "No summary generated."],
             "misconceptions": [],
@@ -142,4 +154,5 @@ class Summarizer:
             "next_session_plan": [],
         }
         fallback["summary_markdown"] = self._render_summary_markdown(fallback)
+        self.last_meta["output_chars"] = len(str(fallback))
         return fallback

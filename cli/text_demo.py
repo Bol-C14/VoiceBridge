@@ -66,10 +66,13 @@ def main() -> int:
     print(f"Profile: {profile.name}")
     print("Enter text (':q' to quit)")
     print(
-        "Commands: /suggest, /explain <text|last>, /coach <text>, /student <text>, "
+        "Commands: /suggest, /explain <text|last>, /coach [text], /student <text>, "
+        "/macro <id> [topic], @macro [topic], /speak 2, /feedback correct|wrong, "
         "/translate last to <lang>, /summarize [N], /export"
     )
 
+    last_coach = None
+    last_segments = []
     try:
         while True:
             text = input("You> ").strip()
@@ -79,23 +82,74 @@ def main() -> int:
             if error:
                 print(error)
                 continue
-            if special == "export":
-                export_session(orchestrator)
-                continue
+            if special:
+                if special.get("type") == "export":
+                    export_session(orchestrator)
+                    continue
+                if special.get("type") == "speak_segment":
+                    speak_index = special.get("index", 0)
+                    if not last_segments:
+                        print("No segments available.")
+                        continue
+                    if speak_index < 0 or speak_index >= len(last_segments):
+                        print("Invalid segment number.")
+                        continue
+                    segment = last_segments[speak_index]
+                    if segment:
+                        orchestrator.speak(segment)
+                    continue
+                if special.get("type") == "feedback":
+                    if not last_coach:
+                        print("No coach feedback available.")
+                        continue
+                    mode = special.get("mode")
+                    feedback = last_coach.get("micro_feedback") if isinstance(last_coach, dict) else None
+                    if not isinstance(feedback, dict):
+                        print("No coach feedback available.")
+                        continue
+                    lines = feedback.get(mode) if mode in ("correct", "wrong") else None
+                    if not isinstance(lines, list) or not lines:
+                        print("No feedback available.")
+                        continue
+                    orchestrator.speak(str(lines[0]))
+                    continue
+
             if not event:
                 continue
 
             result = orchestrator.handle_event(event)
-            render_result(result, orchestrator)
+            if result.segments:
+                last_segments = result.segments
+            if result.coach:
+                last_coach = result.coach
+            render_result(result, orchestrator, event)
     except KeyboardInterrupt:
         print("\nExiting.")
     return 0
 
 
-def parse_command(text: str, profile) -> tuple[Event | None, str | None, str | None]:
+def parse_command(text: str, profile) -> tuple[Event | None, dict | None, str | None]:
     if not text:
         return None, None, None
+    if text.lower().startswith("speak "):
+        target = text[6:].strip()
+        index = _parse_question_index(target)
+        if index is None:
+            return None, None, "Usage: speak q1|q2|q3 (or speak 1)"
+        return None, {"type": "speak_segment", "index": index}, None
     if not text.startswith("/"):
+        if text.startswith("@"):
+            macro_text = text[1:].strip()
+            if not macro_text:
+                return None, None, "Usage: @macro_id [topic]"
+            parts = macro_text.split()
+            macro_id = parts[0]
+            topic = " ".join(parts[1:]).strip()
+            event = Event(action="run_macro", payload_text=macro_id, source="keyboard")
+            if topic:
+                event.metadata["topic"] = topic
+            event.metadata["speak"] = True
+            return event, None, None
         return (
             Event(action=profile.default_action, payload_text=text, source="keyboard"),
             None,
@@ -107,7 +161,7 @@ def parse_command(text: str, profile) -> tuple[Event | None, str | None, str | N
     args = parts[1:]
 
     if cmd == "/export":
-        return None, "export", None
+        return None, {"type": "export"}, None
     if cmd == "/suggest":
         payload = " ".join(args).strip()
         return Event(action="suggest", payload_text=payload, source="keyboard"), None, None
@@ -135,9 +189,34 @@ def parse_command(text: str, profile) -> tuple[Event | None, str | None, str | N
         )
     if cmd == "/coach":
         payload = " ".join(args).strip()
+        event = Event(action="coach_student", payload_text=payload or None, source="keyboard")
         if not payload:
-            return None, None, "Usage: /coach <student message>"
-        return Event(action="coach_student", payload_text=payload, source="keyboard"), None, None
+            event.metadata["use_last"] = True
+        event.metadata["speak"] = True
+        return event, None, None
+    if cmd == "/speak":
+        target = " ".join(args).strip()
+        index = _parse_question_index(target)
+        if index is None:
+            return None, None, "Usage: /speak q1|q2|q3 (or /speak 1)"
+        return None, {"type": "speak_segment", "index": index}, None
+    if cmd == "/macro":
+        if not args:
+            return None, None, "Usage: /macro <id> [topic]"
+        macro_id = args[0]
+        topic = " ".join(args[1:]).strip()
+        event = Event(action="run_macro", payload_text=macro_id, source="keyboard")
+        if topic:
+            event.metadata["topic"] = topic
+        event.metadata["speak"] = True
+        return event, None, None
+    if cmd == "/feedback":
+        if not args:
+            return None, None, "Usage: /feedback correct|wrong"
+        mode = args[0].lower()
+        if mode not in ("correct", "wrong"):
+            return None, None, "Usage: /feedback correct|wrong"
+        return None, {"type": "feedback", "mode": mode}, None
     if cmd == "/translate":
         if not args or args[0].lower() != "last":
             return None, None, "Usage: /translate last to <lang>"
@@ -162,7 +241,23 @@ def parse_command(text: str, profile) -> tuple[Event | None, str | None, str | N
     return None, None, f"Unknown command: {cmd}"
 
 
-def render_result(result: ActionResult, orchestrator: Orchestrator) -> None:
+def _parse_question_index(text: str) -> int | None:
+    if not text:
+        return None
+    target = text.lower().strip()
+    if target.startswith("q"):
+        target = target[1:]
+    if not target.isdigit():
+        return None
+    index = int(target) - 1
+    if index < 0:
+        return None
+    return index
+
+
+def render_result(
+    result: ActionResult, orchestrator: Orchestrator, event: Event | None = None
+) -> None:
     if result.error:
         print(f"(error) {result.error}")
         return
@@ -202,7 +297,25 @@ def render_result(result: ActionResult, orchestrator: Orchestrator) -> None:
         print(json.dumps(result.translation, ensure_ascii=False, indent=2))
         return
     if result.explanation:
-        print(json.dumps(result.explanation, ensure_ascii=False, indent=2))
+        explanation = result.explanation
+        script = explanation.get("script") if isinstance(explanation, dict) else None
+        if isinstance(script, list) and script:
+            print("Script:")
+            for i, line in enumerate(script, 1):
+                text = str(line).strip()
+                if text:
+                    print(f"[{i}] {text}")
+        else:
+            print(json.dumps(result.explanation, ensure_ascii=False, indent=2))
+        checkpoints = (
+            explanation.get("checkpoints") if isinstance(explanation, dict) else None
+        )
+        if isinstance(checkpoints, list) and checkpoints:
+            print("Checkpoints:")
+            for i, item in enumerate(checkpoints, 1):
+                text = str(item).strip()
+                if text:
+                    print(f"- {text}")
         return
     if result.coach:
         coach = result.coach
@@ -219,7 +332,7 @@ def render_result(result: ActionResult, orchestrator: Orchestrator) -> None:
                 if hint:
                     print(f"  hint: {hint}")
 
-            if result.spoken_text:
+            if event and event.metadata.get("speak"):
                 return
 
             choice = input(
@@ -256,7 +369,7 @@ def export_session(orchestrator: Orchestrator) -> None:
     logs_dir = Path("logs")
     logs_dir.mkdir(parents=True, exist_ok=True)
     session_id = orchestrator.session.session.id
-    transcript_path = logs_dir / f"{session_id}_transcript.jsonl"
+    transcript_path = logs_dir / f"{session_id}.jsonl"
     summary_path = logs_dir / f"{session_id}_summary.md"
 
     try:
@@ -265,9 +378,9 @@ def export_session(orchestrator: Orchestrator) -> None:
         log.warning("Failed to write transcript to %s: %s", transcript_path, exc)
         return
 
-    summary_payload = None
+    summary_payload = orchestrator.session.session.metadata.get("rolling_summary_payload")
     summary_text = orchestrator.session.session.metadata.get("rolling_summary")
-    if not summary_text:
+    if not summary_payload:
         result = orchestrator.handle_event(Event(action="summarize", source="keyboard"))
         if result.summary and isinstance(result.summary, dict):
             summary_payload = result.summary
@@ -275,9 +388,10 @@ def export_session(orchestrator: Orchestrator) -> None:
     if not summary_text:
         summary_text = "- No summary available."
     try:
-        orchestrator.session.export_summary_md(
-            summary_path, summary_payload or summary_text
-        )
+        if summary_payload and isinstance(summary_payload, dict):
+            orchestrator.session.export_summary_md(summary_path, summary_payload)
+        else:
+            orchestrator.session.export_summary_md(summary_path, summary_text)
     except OSError as exc:
         log.warning("Failed to write summary to %s: %s", summary_path, exc)
         return

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
-import textwrap
 
 from core.types import Profile
 from services.llm_base import LLMService
 
 
-EXPLAIN_CONCEPT_PROMPT = """You explain a concept for teaching.
+EXPLAIN_CONCEPT_PROMPT = """You explain a concept for teaching as spoken script.
 Return JSON only, following the schema."""
 
 EXPLAIN_CONCEPT_SCHEMA = {
@@ -19,19 +18,7 @@ EXPLAIN_CONCEPT_SCHEMA = {
         "properties": {
             "title": {"type": "string"},
             "one_liner": {"type": "string"},
-            "steps": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "properties": {
-                        "step": {"type": "integer"},
-                        "say": {"type": "string"},
-                        "why": {"type": "string"},
-                    },
-                    "required": ["step", "say", "why"],
-                },
-            },
+            "script": {"type": "array", "items": {"type": "string"}},
             "example": {"type": "string"},
             "checkpoints": {"type": "array", "items": {"type": "string"}},
             "common_pitfalls": {"type": "array", "items": {"type": "string"}},
@@ -39,7 +26,7 @@ EXPLAIN_CONCEPT_SCHEMA = {
         "required": [
             "title",
             "one_liner",
-            "steps",
+            "script",
             "example",
             "checkpoints",
             "common_pitfalls",
@@ -52,9 +39,16 @@ class ExplainConceptEngine:
     def __init__(self, profile: Profile, llm: LLMService):
         self.profile = profile
         self.llm = llm
+        self.last_meta: Dict[str, Any] = {}
 
-    def _build_messages(self, text: str) -> list[dict[str, str]]:
-        prompt = self.profile.prompts.get("explain_concept", "").strip()
+    def _build_messages(
+        self, text: str, prompt_override: str | None = None
+    ) -> list[dict[str, str]]:
+        prompt = (
+            prompt_override.strip()
+            if prompt_override
+            else self.profile.prompts.get("explain_concept", "").strip()
+        )
         messages = [{"role": "system", "content": EXPLAIN_CONCEPT_PROMPT}]
         if prompt:
             messages.append({"role": "system", "content": prompt})
@@ -70,35 +64,30 @@ class ExplainConceptEngine:
     def _limit_text(self, text: str, max_chars: int | None) -> str:
         if not max_chars or len(text) <= max_chars:
             return text
-        return textwrap.shorten(text, width=max_chars, placeholder="...")
+        return text[:max_chars].rstrip()
 
-    def _sanitize_steps(self, steps: Any) -> List[Dict[str, Any]]:
-        max_steps = int(
+    def _sanitize_script(self, script: Any) -> List[str]:
+        max_sentences = int(
             self.profile.constraints.get(
-                "max_explain_steps", self.profile.metadata.get("max_explain_steps", 4)
+                "max_script_sentences",
+                self.profile.metadata.get("max_explain_steps", 6),
             )
         )
-        max_step_chars = int(
+        max_chars = int(
             self.profile.constraints.get(
-                "max_explain_step_chars",
-                self.profile.metadata.get("max_explain_step_chars", 220),
+                "max_script_sentence_chars",
+                self.profile.metadata.get("max_explain_step_chars", 35),
             )
         )
-        cleaned: List[Dict[str, Any]] = []
-        if not isinstance(steps, list):
-            return cleaned
-        for idx, step in enumerate(steps, 1):
-            if not isinstance(step, dict):
-                continue
-            say = self._coerce_text(step.get("say"))
-            if not say:
-                continue
-            why = self._coerce_text(step.get("why", ""))
-            say = self._limit_text(say, max_step_chars)
-            why = self._limit_text(why, max_step_chars)
-            cleaned.append({"step": idx, "say": say, "why": why})
-            if len(cleaned) >= max_steps:
-                break
+        cleaned: List[str] = []
+        if isinstance(script, list):
+            for item in script:
+                text = self._coerce_text(item)
+                if not text:
+                    continue
+                cleaned.append(self._limit_text(text, max_chars))
+                if len(cleaned) >= max_sentences:
+                    break
         return cleaned
 
     def _sanitize_list(self, items: Any, max_items: int) -> List[str]:
@@ -151,9 +140,21 @@ class ExplainConceptEngine:
         one_liner = self._limit_text(one_liner, max_text)
         example = self._limit_text(example, max_text)
 
-        steps = self._sanitize_steps(payload.get("steps") if isinstance(payload, dict) else None)
-        if not steps:
-            steps = [{"step": 1, "say": topic, "why": ""}]
+        script = []
+        if isinstance(payload, dict) and "script" in payload:
+            script = self._sanitize_script(payload.get("script"))
+        if not script and isinstance(payload, dict) and "steps" in payload:
+            steps = payload.get("steps")
+            if isinstance(steps, list):
+                script = []
+                for step in steps:
+                    if isinstance(step, dict):
+                        script.append(self._coerce_text(step.get("say")))
+                    else:
+                        script.append(self._coerce_text(step))
+                script = self._sanitize_script(script)
+        if not script:
+            script = [self._limit_text(topic, max_text)]
 
         checkpoints = self._sanitize_list(
             payload.get("checkpoints") if isinstance(payload, dict) else None,
@@ -166,26 +167,36 @@ class ExplainConceptEngine:
         return {
             "title": title,
             "one_liner": one_liner,
-            "steps": steps,
+            "script": script,
             "example": example,
             "checkpoints": checkpoints,
             "common_pitfalls": pitfalls,
         }
 
-    def explain(self, text: str) -> Dict[str, Any]:
+    def explain(self, text: str, prompt_override: str | None = None) -> Dict[str, Any]:
+        self.last_meta = {"structured_ok": False, "fallback_used": False}
         if not self.llm:
-            return self._sanitize_payload({}, text)
-        messages = self._build_messages(text)
+            self.last_meta["fallback_used"] = True
+            payload = self._sanitize_payload({}, text)
+            self.last_meta["output_chars"] = len(str(payload))
+            return payload
+        messages = self._build_messages(text, prompt_override=prompt_override)
         payload = self.llm.structured(messages, model=None, schema=EXPLAIN_CONCEPT_SCHEMA)
         if isinstance(payload, dict) and payload.get("title"):
-            return self._sanitize_payload(payload, text)
+            self.last_meta["structured_ok"] = True
+            sanitized = self._sanitize_payload(payload, text)
+            self.last_meta["output_chars"] = len(str(sanitized))
+            return sanitized
         raw = self.llm.complete(messages, model=None)
+        self.last_meta["fallback_used"] = True
         fallback_payload = {
             "title": text,
             "one_liner": raw or text,
-            "steps": [{"step": 1, "say": raw or text, "why": ""}],
+            "script": [raw or text],
             "example": "",
             "checkpoints": [],
             "common_pitfalls": [],
         }
-        return self._sanitize_payload(fallback_payload, text)
+        sanitized = self._sanitize_payload(fallback_payload, text)
+        self.last_meta["output_chars"] = len(str(sanitized))
+        return sanitized

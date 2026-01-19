@@ -30,7 +30,7 @@ class LocalFileStorageAdapter(StorageAdapter):
         self.log = get_logger("storage.local")
 
     def _jsonl_path(self, session_id: str) -> Path:
-        return self.base_dir / f"{session_id}.jsonl"
+        return self.base_dir / f"{session_id}_events.jsonl"
 
     def append_event(self, session_id: str, event: Dict[str, Any]) -> None:
         path = self._jsonl_path(session_id)

@@ -104,32 +104,36 @@ class ConversationSession:
 
     def export_summary_md(self, path: Path, summary: Dict[str, Any] | str) -> None:
         if isinstance(summary, dict):
-            summary_text = summary.get("summary_markdown")
-            if not summary_text:
-                summary_text = self._render_summary_md(summary)
+            summary_text = self._render_summary_md(summary)
         else:
             summary_text = str(summary)
         path.write_text(summary_text or "- No summary available.", encoding="utf-8")
 
     def _render_summary_md(self, summary: Dict[str, Any]) -> str:
         sections = [
-            ("Summary", summary.get("summary")),
+            ("Key Points", summary.get("summary")),
             ("Misconceptions", summary.get("misconceptions")),
             ("Homework", summary.get("homework")),
             ("Next Session Plan", summary.get("next_session_plan")),
         ]
-        lines: list[str] = []
+        lines: list[str] = [
+            "# Lesson Summary",
+            f"- Session: {self.session.id}",
+            f"- Profile: {self.session.profile.name}",
+            f"- Started: {self.session.started_at.isoformat()}",
+            "",
+        ]
         for title, items in sections:
-            if not items:
-                continue
-            lines.append(f"{title}:")
-            if isinstance(items, list):
+            lines.append(f"## {title}")
+            if isinstance(items, list) and items:
                 for item in items:
                     text = str(item).strip()
                     if text:
                         lines.append(f"- {text}")
+            else:
+                lines.append("- (none)")
             lines.append("")
-        return "\n".join(lines).strip() or "- No summary available."
+        return "\n".join(lines).strip()
 
     def to_chat_history(
         self,

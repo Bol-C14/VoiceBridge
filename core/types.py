@@ -10,6 +10,7 @@ UtteranceSource = Literal["mic", "asr", "system_audio", "keyboard", "agent"]
 EventSource = Literal["keyboard", "asr", "system_audio", "agent"]
 ActionType = Literal[
     "add_utterance",
+    "run_macro",
     "suggest",
     "explain_concept",
     "explain_last",
@@ -96,6 +97,7 @@ class ActionResult:
     coach: Optional[Dict[str, Any]] = None
     summary: Optional[Dict[str, Any]] = None
     spoken_text: Optional[str] = None
+    segments: List[str] = field(default_factory=list)
     error: Optional[str] = None
 
 

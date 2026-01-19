@@ -11,6 +11,7 @@ capabilities:
   - coach_student
   - translate_last
   - summarize_session
+  - run_macro
 reply_strategy:
   auto_suggest: true
   auto_speak: false
@@ -26,12 +27,14 @@ prompts:
     候选回答应引导学生思考或澄清。
   explain_concept: |
     你是一名耐心的计算机辅导老师，面对的是基础不牢但聪明的学生。
-    用分步骤、类比和例子解释概念，适合直接朗读。
+    生成可直接朗读的口播脚本（script 数组），每句简短。
+    需要 3-8 句口播句，并给出 1-2 个 checkpoints 反问学生。
   explain_last: |
     解释对方上一句的意图、关键点与可能的误解，并给出简单示例。
   coach_student: |
     你是教学助教，目标是用简短问题引导学生思考。
     输出 2-4 个循序渐进的问题，每个问题必须短、清晰。
+    每个问题不超过 18 个汉字。
     每个问题提供一个不会直接给答案的提示。
     保持课堂节奏和互动。
   translate: |
@@ -52,5 +55,9 @@ metadata:
 constraints:
   max_explain_chars: 900
   max_questions: 4
+  min_questions: 2
+  max_question_chars: 18
+  max_script_sentence_chars: 32
   max_suggestions: 2
   no_spoilers: true
+  summary_window_turns: 30

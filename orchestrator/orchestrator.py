@@ -5,6 +5,7 @@ from typing import Any
 
 from audio_io import AudioIOBundle, BasicAudioOutput
 from conversation.session_manager import ConversationSession
+from core.config import load_macros
 from core.storage import LocalFileStorageAdapter, StorageAdapter
 from core.types import (
     ActionResult,
@@ -38,6 +39,7 @@ class Orchestrator:
         services: ServiceBundle,
         audio_io: AudioIOBundle | None = None,
         storage: StorageAdapter | None = None,
+        macros: dict[str, Any] | None = None,
     ):
         self.profile = profile
         self.services = services
@@ -45,6 +47,7 @@ class Orchestrator:
         if not self.audio_io.output:
             self.audio_io.output = BasicAudioOutput()
         self.storage = storage or LocalFileStorageAdapter()
+        self.macros = macros if macros is not None else load_macros(allow_missing=True)
         self.session = ConversationSession(profile)
         self.suggestion_engine = (
             SuggestionEngine(profile, services.llm) if services.llm else None
@@ -113,6 +116,8 @@ class Orchestrator:
             return self._handle_suggest(event)
         if action == "add_utterance":
             return self._handle_add_utterance(event)
+        if action == "run_macro":
+            return self._handle_run_macro(event)
         if action == "translate_last":
             return self._handle_translate_last(event)
         if action == "explain_last":
@@ -193,6 +198,7 @@ class Orchestrator:
         normalized = str(action).lower()
         if normalized in {
             "add_utterance",
+            "run_macro",
             "suggest",
             "explain_concept",
             "explain_last",
@@ -213,6 +219,8 @@ class Orchestrator:
         if not self.profile.capabilities:
             return True
         if action in self.profile.capabilities:
+            return True
+        if action == "run_macro" and "run_macro" in self.profile.capabilities:
             return True
         if action == "summarize" and "summarize_session" in self.profile.capabilities:
             return True
@@ -296,6 +304,52 @@ class Orchestrator:
         )
         return ActionResult(action="add_utterance")
 
+    def _handle_run_macro(self, event: Event) -> ActionResult:
+        macro_id = (event.payload_text or "").strip()
+        if not macro_id:
+            return ActionResult(action="run_macro", error="No macro id provided.")
+        macro = self.macros.get(macro_id)
+        if not isinstance(macro, dict):
+            return ActionResult(action="run_macro", error=f"Macro '{macro_id}' not found.")
+
+        context = self._macro_context(event)
+        mode = str(macro.get("mode", "script")).lower()
+        if mode == "prompt":
+            prompt = self._render_macro_text(str(macro.get("prompt", "")), context)
+            topic = context.get("topic") or macro_id
+            explanation = self.explain_concept_engine.explain(
+                str(topic), prompt_override=prompt
+            )
+        else:
+            explanation = self._macro_script_payload(macro, context)
+
+        spoken_text = self._build_explain_spoken_text(explanation)
+        segments = []
+        script = explanation.get("script") if isinstance(explanation, dict) else None
+        if isinstance(script, list):
+            segments = [str(item) for item in script if str(item).strip()]
+
+        if event.metadata.get("speak") and spoken_text:
+            self.speak(spoken_text)
+        self._append_event_log(
+            {
+                "type": "macro",
+                "timestamp": datetime.utcnow().isoformat(),
+                "macro_id": macro_id,
+                "mode": mode,
+            }
+        )
+        result = ActionResult(
+            action="run_macro",
+            explanation=explanation,
+            spoken_text=spoken_text,
+            segments=segments,
+        )
+        self._log_action_metrics(
+            "run_macro", {"structured_ok": True, "fallback_used": False}, result
+        )
+        return result
+
     def _handle_translate_last(self, event: Event) -> ActionResult:
         last = self.session.select_last_utterance("remote_user")
         if not last:
@@ -349,17 +403,36 @@ class Orchestrator:
         )
         if event.metadata.get("speak") and spoken_text:
             self.speak(spoken_text)
-        return ActionResult(
+        segments = []
+        if isinstance(explanation, dict):
+            script = explanation.get("script")
+            if isinstance(script, list):
+                segments = [str(item) for item in script if str(item).strip()]
+        result = ActionResult(
             action="explain_concept",
             explanation=explanation,
             spoken_text=spoken_text,
+            segments=segments,
         )
+        self._log_action_metrics(
+            "explain_concept", self.explain_concept_engine.last_meta, result
+        )
+        return result
 
     def _handle_coach_student(self, event: Event) -> ActionResult:
         if not event.payload_text:
-            return ActionResult(
-                action="coach_student", error="No student message provided."
-            )
+            if event.metadata.get("use_last"):
+                last = self.session.select_last_utterance("remote_user")
+                if not last:
+                    return ActionResult(
+                        action="coach_student",
+                        error="No student message provided.",
+                    )
+                event.payload_text = last.text
+            else:
+                return ActionResult(
+                    action="coach_student", error="No student message provided."
+                )
 
         utt = Utterance(
             speaker=self.remote_participant,
@@ -388,19 +461,37 @@ class Orchestrator:
         )
 
         spoken_text = None
-        if event.metadata.get("speak"):
-            questions = coach.get("questions") if isinstance(coach, dict) else None
-            if isinstance(questions, list) and questions:
-                spoken_text = str(questions[0].get("q") or "").strip()
-            if spoken_text:
-                self.speak(spoken_text)
-
-        return ActionResult(action="coach_student", coach=coach, spoken_text=spoken_text)
+        questions = coach.get("questions") if isinstance(coach, dict) else None
+        if isinstance(questions, list) and questions:
+            spoken_text = str(questions[0].get("q") or "").strip()
+        if event.metadata.get("speak") and spoken_text:
+            self.speak(spoken_text)
+        segments = []
+        if isinstance(questions, list):
+            segments = [
+                str(item.get("q"))
+                for item in questions
+                if isinstance(item, dict) and str(item.get("q") or "").strip()
+            ]
+        result = ActionResult(
+            action="coach_student",
+            coach=coach,
+            spoken_text=spoken_text,
+            segments=segments,
+        )
+        self._log_action_metrics("coach_student", self.coach_engine.last_meta, result)
+        return result
 
     def _handle_summarize(self, event: Event) -> ActionResult:
-        max_turns = int(event.metadata.get("max_turns", 12))
+        max_turns = int(
+            event.metadata.get(
+                "max_turns",
+                self.profile.constraints.get("summary_window_turns", 30),
+            )
+        )
         summary = self.summarizer.summarize(self.session, max_turns=max_turns)
         self.session.session.metadata["rolling_summary"] = summary.get("summary_markdown", "")
+        self.session.session.metadata["rolling_summary_payload"] = summary
         self.session.session.metadata["last_summary_index"] = len(
             self.session.session.utterances
         )
@@ -411,7 +502,9 @@ class Orchestrator:
                 "summary": summary,
             }
         )
-        return ActionResult(action="summarize", summary=summary)
+        result = ActionResult(action="summarize", summary=summary)
+        self._log_action_metrics("summarize", self.summarizer.last_meta, result)
+        return result
 
     def _build_explain_spoken_text(self, explanation: dict[str, Any]) -> str:
         max_chars = int(
@@ -424,28 +517,26 @@ class Orchestrator:
             )
         )
         parts: list[str] = []
-        title = explanation.get("title")
-        if isinstance(title, str) and title.strip():
-            parts.append(title.strip())
         one_liner = explanation.get("one_liner")
         if isinstance(one_liner, str) and one_liner.strip():
             parts.append(one_liner.strip())
-        steps = explanation.get("steps")
-        if isinstance(steps, list):
-            for step in steps:
-                if not isinstance(step, dict):
-                    continue
-                say = step.get("say")
-                if isinstance(say, str) and say.strip():
-                    parts.append(say.strip())
+        else:
+            title = explanation.get("title")
+            if isinstance(title, str) and title.strip():
+                parts.append(title.strip())
+        script = explanation.get("script")
+        if isinstance(script, list):
+            for line in script[:3]:
+                if isinstance(line, str) and line.strip():
+                    parts.append(line.strip())
         example = explanation.get("example")
         if isinstance(example, str) and example.strip():
             parts.append(example.strip())
         checkpoints = explanation.get("checkpoints")
         if isinstance(checkpoints, list) and checkpoints:
-            joined = "; ".join([str(item) for item in checkpoints if str(item).strip()])
-            if joined:
-                parts.append(joined)
+            first_cp = checkpoints[0]
+            if isinstance(first_cp, str) and first_cp.strip():
+                parts.append(first_cp.strip())
         spoken = "\n".join(parts).strip()
         if max_chars and len(spoken) > max_chars:
             spoken = spoken[:max_chars].rstrip()
@@ -517,11 +608,62 @@ class Orchestrator:
         )
         return utt
 
+    def _macro_context(self, event: Event) -> dict[str, str]:
+        last_student = self.session.select_last_utterance("remote_user")
+        topic = str(event.metadata.get("topic", "")).strip()
+        return {
+            "last_student_question": last_student.text if last_student else "",
+            "topic": topic,
+        }
+
+    def _render_macro_text(self, text: str, context: dict[str, str]) -> str:
+        rendered = text
+        for key, value in context.items():
+            rendered = rendered.replace(f"{{{{{key}}}}}", value or "")
+        return rendered
+
+    def _macro_script_payload(
+        self, macro: dict[str, Any], context: dict[str, str]
+    ) -> dict[str, Any]:
+        def _render(obj: Any) -> Any:
+            if isinstance(obj, str):
+                return self._render_macro_text(obj, context)
+            if isinstance(obj, list):
+                return [_render(item) for item in obj]
+            if isinstance(obj, dict):
+                return {k: _render(v) for k, v in obj.items()}
+            return obj
+
+        payload = _render(macro)
+        return {
+            "title": payload.get("title") or context.get("topic") or "Macro",
+            "one_liner": payload.get("one_liner") or payload.get("title") or "Macro",
+            "script": payload.get("script") or [],
+            "example": payload.get("example") or "",
+            "checkpoints": payload.get("checkpoints") or [],
+            "common_pitfalls": payload.get("common_pitfalls") or [],
+        }
+
     def _append_event_log(self, payload: dict[str, Any]) -> None:
         if not self.storage:
             return
         payload.setdefault("session_id", self.session.session.id)
         self.storage.append_event(self.session.session.id, payload)
+
+    def _log_action_metrics(
+        self, action: str, meta: dict[str, Any] | None, result: ActionResult
+    ) -> None:
+        payload = {
+            "type": "action_metrics",
+            "timestamp": datetime.utcnow().isoformat(),
+            "action": action,
+            "structured_ok": bool(meta.get("structured_ok")) if meta else None,
+            "fallback_used": bool(meta.get("fallback_used")) if meta else None,
+            "output_chars": meta.get("output_chars") if meta else None,
+            "segments_count": len(result.segments) if result.segments else 0,
+            "spoken_chars": len(result.spoken_text or ""),
+        }
+        self._append_event_log(payload)
 
     def _suggestion_to_dict(self, suggestion: Suggestion) -> dict[str, Any]:
         return {

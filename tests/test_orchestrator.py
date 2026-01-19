@@ -51,7 +51,7 @@ def test_explain_concept_fallback():
     payload = engine.explain("pointers")
     assert payload.get("title")
     assert payload.get("one_liner")
-    assert payload.get("steps")
+    assert payload.get("script")
 
 
 def test_coach_fallback():

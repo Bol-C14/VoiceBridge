@@ -12,6 +12,7 @@ from core.types import ActionType, Profile, ReplyStrategy
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 DEFAULT_PROFILES_DIR = DEFAULT_CONFIG_DIR / "profiles"
 DEFAULT_SETTINGS_FILE = DEFAULT_CONFIG_DIR / "settings.yml"
+DEFAULT_MACROS_FILE = DEFAULT_CONFIG_DIR / "teaching_macros.yml"
 
 
 @dataclass
@@ -161,6 +162,19 @@ def load_profiles(profiles_dir: Path | None = None) -> Dict[str, Profile]:
     if not profiles:
         raise ConfigError(f"No profiles found under {directory}")
     return profiles
+
+
+def load_macros(path: Path | None = None, allow_missing: bool = True) -> Dict[str, Any]:
+    macros_path = path or DEFAULT_MACROS_FILE
+    if not macros_path.exists():
+        if allow_missing:
+            return {}
+        raise ConfigError(f"Macros file not found: {macros_path}")
+
+    data = _load_yaml_file(macros_path)
+    if not isinstance(data, dict):
+        raise ConfigError(f"Expected mapping in {macros_path}, got {type(data).__name__}")
+    return data
 
 
 def get_profile(profiles: Dict[str, Profile], name: str) -> Profile:

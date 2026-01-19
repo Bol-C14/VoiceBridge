@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
-import textwrap
 
 from conversation.session_manager import ConversationSession
 from core.types import Profile
@@ -52,6 +51,7 @@ class CoachEngine:
     def __init__(self, profile: Profile, llm: LLMService):
         self.profile = profile
         self.llm = llm
+        self.last_meta: Dict[str, Any] = {}
 
     def _context_transcript(self, session: ConversationSession, max_turns: int = 6) -> str:
         parts = []
@@ -115,7 +115,7 @@ class CoachEngine:
     def _limit_text(self, text: str, max_chars: int | None) -> str:
         if not max_chars or len(text) <= max_chars:
             return text
-        return textwrap.shorten(text, width=max_chars, placeholder="...")
+        return text[:max_chars].rstrip()
 
     def _sanitize_questions(self, items: Any) -> List[Dict[str, str]]:
         max_questions = int(
@@ -134,6 +134,7 @@ class CoachEngine:
             )
         )
         no_spoilers = bool(self.profile.constraints.get("no_spoilers", False))
+        min_questions = int(self.profile.constraints.get("min_questions", 2))
 
         questions: List[Dict[str, str]] = []
         if not isinstance(items, list):
@@ -179,22 +180,23 @@ class CoachEngine:
             default="Ask the student to try a small example.",
         )
         questions = self._sanitize_questions(payload.get("questions") if isinstance(payload, dict) else None)
-        if not questions:
-            questions = [
-                {
-                    "q": self._limit_text(
-                        f"Can you restate the problem in your own words?",
-                        int(
-                            self.profile.constraints.get(
-                                "max_question_chars",
-                                self.profile.metadata.get("max_coach_question_chars", 140),
-                            )
-                        ),
+        min_questions = int(self.profile.constraints.get("min_questions", 2))
+        if len(questions) < min_questions:
+            fallback_q = {
+                "q": self._limit_text(
+                    "请用一句话复述题目？",
+                    int(
+                        self.profile.constraints.get(
+                            "max_question_chars",
+                            self.profile.metadata.get("max_coach_question_chars", 140),
+                        )
                     ),
-                    "expected": "Student restates the problem clearly.",
-                    "hint": "Focus on what the input and output should be.",
-                }
-            ]
+                ),
+                "expected": "Student restates the problem clearly.",
+                "hint": "先说清输入与输出。",
+            }
+            while len(questions) < min_questions:
+                questions.append(fallback_q)
         feedback = self._sanitize_feedback(payload.get("micro_feedback") if isinstance(payload, dict) else None)
         return {
             "goal": goal,
@@ -206,12 +208,22 @@ class CoachEngine:
     def generate_coaching(
         self, session: ConversationSession, student_text: str
     ) -> Dict[str, Any]:
+        self.last_meta = {"structured_ok": False, "fallback_used": False}
         if not self.llm:
-            return self._sanitize_payload({}, student_text)
+            self.last_meta["fallback_used"] = True
+            payload = self._sanitize_payload({}, student_text)
+            self.last_meta["output_chars"] = len(str(payload))
+            return payload
         messages = self._build_messages(session, student_text)
         payload = self.llm.structured(messages, model=None, schema=COACH_SCHEMA)
         if isinstance(payload, dict) and payload.get("questions"):
-            return self._sanitize_payload(payload, student_text)
+            self.last_meta["structured_ok"] = True
+            sanitized = self._sanitize_payload(payload, student_text)
+            self.last_meta["output_chars"] = len(str(sanitized))
+            return sanitized
         raw = self.llm.complete(messages, model=None)
+        self.last_meta["fallback_used"] = True
         fallback_payload = {"questions": [{"q": raw or student_text, "expected": "", "hint": ""}]}
-        return self._sanitize_payload(fallback_payload, student_text)
+        sanitized = self._sanitize_payload(fallback_payload, student_text)
+        self.last_meta["output_chars"] = len(str(sanitized))
+        return sanitized

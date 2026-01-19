@@ -1,0 +1,31 @@
+ptr_intro:
+  mode: script
+  title: "Pointer Basics"
+  one_liner: "指针是保存地址的变量。"
+  script:
+    - "把指针想成一个门牌号。"
+    - "门牌号指向的房子，才是值。"
+    - "解引用就是沿着门牌号进屋子。"
+  checkpoints:
+    - "指针里存的到底是什么？"
+    - "解引用在做什么？"
+  common_pitfalls:
+    - "把指针当成值本身。"
+ws_we:
+  mode: script
+  title: "ws/we Tokenization"
+  one_liner: "ws 和 we 是词的起止位置。"
+  script:
+    - "ws 标记单词开始。"
+    - "we 标记单词结束。"
+    - "空白出现时更新它们。"
+  checkpoints:
+    - "ws 何时更新？"
+    - "we 何时更新？"
+  common_pitfalls:
+    - "忽略连续空白。"
+prompt_intro:
+  mode: prompt
+  prompt: |
+    用清晰口播解释 {{topic}}，结合学生问题：{{last_student_question}}。
+    生成 3-6 句 script，每句简短，避免长代码。
