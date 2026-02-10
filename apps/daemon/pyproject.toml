@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voicebridge-daemon"
+version = "0.1.0"
+description = "Local daemon for VoiceBridge (FastAPI + WebSocket)."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "voicebridge-core>=0.1.0",
+  "fastapi>=0.110.0",
+  "uvicorn>=0.27.0",
+  # Enable WebSocket upgrades (uvicorn requires websockets or wsproto).
+  "websockets>=11.0,<14",
+]
+
+[project.scripts]
+voicebridge-daemon = "voicebridge_daemon.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["voicebridge_daemon*"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+voicebridge_daemon = ["static/*.html"]

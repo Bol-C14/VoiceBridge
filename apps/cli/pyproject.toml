@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voicebridge-cli"
+version = "0.1.0"
+description = "VoiceBridge CLI tools (meeting record/replay/export)."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "voicebridge-core>=0.1.0",
+]
+
+[project.scripts]
+voicebridge = "voicebridge_cli.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["voicebridge_cli*"]
+

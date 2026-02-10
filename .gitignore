@@ -30,6 +30,19 @@ htmlcov/
 .idea/
 *.sublime-workspace
 *.sublime-project
+.codex/
+
+# Node / frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Rust / Tauri
+target/
+src-tauri/target/
+.cargo/
 
 # macOS
 .DS_Store
@@ -37,6 +50,7 @@ htmlcov/
 # Logs and databases
 *.log
 *.sqlite3
+*.sqlite
 *.db
 
 # Audio / generated artifacts (large)

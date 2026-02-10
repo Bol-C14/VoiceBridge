@@ -1,0 +1,43 @@
+name: "Meeting"
+mode: "meeting"
+
+audio:
+  # input_device: "Your Microphone Name"
+  sample_rate: 16000
+  channels: 1
+  frame_duration_ms: 20
+
+asr:
+  backend: "faster_whisper"
+  # model: "small"   # optional; defaults to settings.asr_default_model
+  language: "auto"
+
+translate:
+  enabled: true
+  target_language: "zh"
+  # model: "gpt-4o-mini"  # optional; defaults to settings.openai_model_translate
+
+summary:
+  enabled: true
+  cadence_sec: 60
+  # model: "gpt-4o-mini"  # optional; defaults to settings.openai_model_summary
+
+explain:
+  enabled: true
+  # model: "gpt-4o-mini"  # optional; defaults to settings.openai_model_explain
+
+diarize:
+  run: "post_meeting"
+
+storage:
+  save_audio: true
+  save_events: true
+
+prompts:
+  translate: |
+    Translate meeting segments to the target language.
+  summarize: |
+    Produce rolling meeting summary JSON.
+  explain: |
+    Explain a clicked term/topic using meeting context.
+

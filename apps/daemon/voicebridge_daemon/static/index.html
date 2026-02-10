@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VoiceBridge (Local)</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #111a33;
+        --text: #e9ecf7;
+        --muted: #9aa4c7;
+        --accent: #7aa2ff;
+        --danger: #ff6b6b;
+        --ok: #38d39f;
+        --border: rgba(255, 255, 255, 0.08);
+      }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+          Helvetica, Arial;
+        background: var(--bg);
+        color: var(--text);
+      }
+      header {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: 0.2px;
+      }
+      main {
+        display: grid;
+        grid-template-columns: 1.6fr 1fr;
+        gap: 12px;
+        padding: 12px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        min-height: 160px;
+      }
+      .card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px;
+        background: rgba(0, 0, 0, 0.12);
+      }
+      .help {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.35;
+      }
+      .warn {
+        color: #ffd166;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      select,
+      input {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 10px;
+        padding: 8px 10px;
+        outline: none;
+      }
+      button {
+        background: rgba(122, 162, 255, 0.16);
+        color: var(--text);
+        border: 1px solid rgba(122, 162, 255, 0.35);
+        border-radius: 10px;
+        padding: 8px 10px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: rgba(122, 162, 255, 0.22);
+      }
+      button.danger {
+        background: rgba(255, 107, 107, 0.14);
+        border-color: rgba(255, 107, 107, 0.35);
+      }
+      button.danger:hover {
+        background: rgba(255, 107, 107, 0.2);
+      }
+      .badge {
+        display: inline-flex;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
+      .badge.ok {
+        color: var(--ok);
+        border-color: rgba(56, 211, 159, 0.3);
+      }
+      .badge.err {
+        color: var(--danger);
+        border-color: rgba(255, 107, 107, 0.35);
+      }
+      .meter {
+        position: relative;
+        height: 10px;
+        width: 180px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.05);
+        overflow: hidden;
+      }
+      .meter > div {
+        height: 100%;
+        width: 0%;
+        background: rgba(56, 211, 159, 0.85);
+        transition: width 80ms linear;
+      }
+      #transcript {
+        max-height: 62vh;
+        overflow: auto;
+        padding-right: 6px;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+      .seg {
+        border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+        padding: 8px 0;
+      }
+      .seg.partial {
+        opacity: 0.78;
+      }
+      .seg .t {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .seg .tr {
+        margin-top: 4px;
+        color: rgba(233, 236, 247, 0.9);
+        opacity: 0.9;
+        font-style: italic;
+      }
+      pre {
+        white-space: pre-wrap;
+        margin: 8px 0 0;
+        color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+        font-size: 12px;
+      }
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>VoiceBridge (Local Daemon UI)</h1>
+      <span id="status" class="badge">disconnected</span>
+    </header>
+
+    <main>
+      <section class="panel">
+        <div class="row">
+          <label class="muted">Profile</label>
+          <select id="profile"></select>
+          <button id="start">Start</button>
+          <button id="stop" class="danger" disabled>Stop</button>
+	          <span class="muted">Session:</span>
+	          <span id="sid" class="badge">-</span>
+	          <span id="run_status" class="badge">idle</span>
+	          <span id="cfg_status" class="badge">ASR: -</span>
+	        </div>
+        <div style="height: 10px"></div>
+        <div class="row">
+          <span class="muted" style="min-width: 70px">Mic level</span>
+          <div class="meter" title="mic level">
+            <div id="mic_bar"></div>
+          </div>
+        </div>
+
+        <div style="height: 10px"></div>
+        <div id="transcript"></div>
+      </section>
+
+      <section class="panel">
+        <div class="row" style="justify-content: space-between">
+          <span class="muted">Settings</span>
+          <span id="key_status" class="badge">OpenAI key: unknown</span>
+        </div>
+        <div style="height: 10px"></div>
+        <div class="row">
+          <input
+            id="openai_key"
+            type="password"
+            placeholder="OpenAI API key (sk-...)"
+            style="flex: 1"
+          />
+          <button id="save_key">Save</button>
+        </div>
+	        <div style="height: 10px"></div>
+	        <div class="row">
+	          <label class="muted" style="min-width: 92px">ASR mode</label>
+	          <select id="asr_mode" style="flex: 1">
+	            <option value="offline">Offline (local)</option>
+	            <option value="online">Online (streaming)</option>
+	          </select>
+	        </div>
+	        <div class="help" style="margin-top: 6px">
+	          Offline uses local <code>faster-whisper</code> models (no internet). Online uses OpenAI Audio
+	          transcription (internet) and can show partial output.
+	        </div>
+	        <div style="height: 10px"></div>
+
+	        <div id="asr_offline_fields" class="card">
+	          <div class="help" style="margin-bottom: 8px">
+	            Offline knobs (apply to local ASR). On M1, try <code>small</code> + <code>int8</code> + VAD 3000–5000ms.
+	          </div>
+	          <div class="row">
+	            <label class="muted" style="min-width: 92px">Model</label>
+	            <input
+	              id="asr_default_model"
+	              list="asr_models"
+	              placeholder="small / medium / large-v3 / HF repo id / local path…"
+	              style="flex: 1"
+	            />
+	          </div>
+	          <div style="height: 8px"></div>
+	          <div class="row">
+	            <label class="muted" style="min-width: 92px">Compute</label>
+	            <input
+	              id="asr_compute_type"
+	              list="asr_compute_types"
+	              placeholder="(optional) int8 / float16 / float32"
+	              style="flex: 1"
+	            />
+	          </div>
+	          <div style="height: 8px"></div>
+	          <div class="row">
+	            <label class="muted" style="min-width: 92px">VAD max</label>
+	            <input
+	              id="vad_max_segment_ms"
+	              type="number"
+	              min="500"
+	              max="60000"
+	              step="100"
+	              placeholder="10000"
+	              style="flex: 1"
+	            />
+	          </div>
+	          <div id="asr_offline_hint" class="help warn" style="margin-top: 6px; display: none"></div>
+	        </div>
+	        <datalist id="asr_compute_types">
+	          <option value="int8"></option>
+	          <option value="int8_float16"></option>
+	          <option value="float16"></option>
+	          <option value="float32"></option>
+	        </datalist>
+        <datalist id="asr_models">
+          <option value="tiny"></option>
+          <option value="base"></option>
+          <option value="small"></option>
+          <option value="medium"></option>
+          <option value="large-v2"></option>
+	          <option value="large-v3"></option>
+	          <option value="distil-large-v3"></option>
+	        </datalist>
+	        <div style="height: 10px"></div>
+	        <div id="asr_online_fields" class="card" style="display: none">
+	          <div class="help" style="margin-bottom: 8px">
+	            Online ASR uses OpenAI. Recommended: <code>gpt-4o-mini-transcribe</code>.
+	          </div>
+	          <div class="row">
+	            <label class="muted" style="min-width: 92px">Model</label>
+	            <input
+	              id="openai_asr_model"
+	              list="openai_asr_models"
+	              placeholder="gpt-4o-mini-transcribe"
+	              style="flex: 1"
+	            />
+	          </div>
+	        </div>
+	        <datalist id="openai_asr_models">
+	          <option value="gpt-4o-mini-transcribe"></option>
+	          <option value="gpt-4o-transcribe"></option>
+	          <option value="gpt-4o-transcribe-latest"></option>
+	          <option value="whisper-1"></option>
+	        </datalist>
+        <div style="height: 8px"></div>
+        <div class="row">
+          <label class="muted" style="min-width: 92px">Translate</label>
+          <select id="translate_enabled" style="flex: 1">
+            <option value="on">On</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <div style="height: 8px"></div>
+        <div class="row">
+          <label class="muted" style="min-width: 92px">Target lang</label>
+          <select id="translate_target_language" style="flex: 1">
+            <option value="zh">Chinese (zh)</option>
+            <option value="en">English (en)</option>
+            <option value="fr">French (fr)</option>
+            <option value="es">Spanish (es)</option>
+            <option value="ja">Japanese (ja)</option>
+            <option value="ko">Korean (ko)</option>
+          </select>
+        </div>
+        <div style="height: 8px"></div>
+        <div class="row">
+          <label class="muted" style="min-width: 92px">Translate model</label>
+          <input
+            id="openai_model_translate"
+            list="openai_models"
+            placeholder="OpenAI model for translation"
+            style="flex: 1"
+          />
+        </div>
+        <div style="height: 8px"></div>
+        <div class="row">
+          <label class="muted" style="min-width: 92px">Summary</label>
+          <input
+            id="openai_model_summary"
+            list="openai_models"
+            placeholder="OpenAI model for summary"
+            style="flex: 1"
+          />
+        </div>
+        <div style="height: 8px"></div>
+        <div class="row">
+          <label class="muted" style="min-width: 92px">Explain</label>
+          <input
+            id="openai_model_explain"
+            list="openai_models"
+            placeholder="OpenAI model for explanations"
+            style="flex: 1"
+          />
+        </div>
+        <datalist id="openai_models">
+          <option value="gpt-4o-mini"></option>
+          <option value="gpt-4o"></option>
+        </datalist>
+        <div style="height: 8px"></div>
+        <div class="row">
+          <button id="save_models">Save models</button>
+          <span class="muted" style="font-size: 12px"
+            >Applies to new sessions</span
+          >
+        </div>
+        <div class="muted" style="margin-top: 6px; font-size: 12px">
+          Key is saved to the local settings file (plaintext). Changes apply to new sessions.
+        </div>
+
+        <div style="height: 14px"></div>
+        <div class="row">
+          <span class="muted">Rolling summary</span>
+        </div>
+        <div id="summary" class="muted" style="margin-top: 8px">-</div>
+
+        <div style="height: 12px"></div>
+        <div class="row">
+          <input id="term" placeholder="Explain a term/topic…" style="flex: 1" />
+          <button id="explain" disabled>Explain</button>
+        </div>
+        <pre id="explain_out"></pre>
+
+        <div style="height: 12px"></div>
+        <div class="row">
+          <button id="export" disabled>Export Markdown</button>
+          <a id="export_link" href="#" style="display: none" target="_blank"
+            >open</a
+          >
+        </div>
+
+        <div style="height: 12px"></div>
+        <div class="row">
+          <span class="muted">Logs</span>
+        </div>
+        <pre id="logs"></pre>
+      </section>
+    </main>
+
+    <script>
+      const el = (id) => document.getElementById(id);
+      const logs = el("logs");
+      const transcript = el("transcript");
+      const summary = el("summary");
+	      const status = el("status");
+	      const sidBadge = el("sid");
+	      const runStatus = el("run_status");
+	      const cfgStatus = el("cfg_status");
+	      const micBar = el("mic_bar");
+	      const exportLink = el("export_link");
+	      const keyStatus = el("key_status");
+
+      const segments = new Map(); // segment_id -> {start_ms,end_ms,text,tr,partial}
+
+      let ws = null;
+      let sessionId = null;
+      let lastMic = 0.0;
+
+      function log(msg) {
+        logs.textContent = (logs.textContent + msg + "\n").slice(-8000);
+      }
+
+      function setStatus(kind, text) {
+        status.textContent = text;
+        status.className = "badge " + (kind || "");
+      }
+
+      function setRunStatus(kind, text) {
+        runStatus.textContent = text;
+        runStatus.className = "badge " + (kind || "");
+      }
+
+      function setMicLevel(rms) {
+        // rms is ~[0,1]; scale it to make typical speech visible.
+        const v = Math.max(0, Math.min(1, Number(rms || 0) * 10));
+        // light smoothing to reduce jitter
+        lastMic = lastMic * 0.65 + v * 0.35;
+        micBar.style.width = `${Math.round(lastMic * 100)}%`;
+      }
+
+      function fmtMs(ms) {
+        ms = Number(ms || 0);
+        const s = Math.floor(ms / 1000);
+        const mm = String(Math.floor(s / 60)).padStart(2, "0");
+        const ss = String(s % 60).padStart(2, "0");
+        return `${mm}:${ss}`;
+      }
+
+      function renderTranscript() {
+        const arr = Array.from(segments.values()).sort(
+          (a, b) => a.start_ms - b.start_ms
+        );
+        transcript.innerHTML = arr
+          .map((s) => {
+            const tr = s.tr ? `<div class="tr">${escapeHtml(s.tr)}</div>` : "";
+            const klass = s.partial ? "seg partial" : "seg";
+            return `<div class="${klass}">
+              <div class="t">${fmtMs(s.start_ms)}–${fmtMs(s.end_ms)}</div>
+              <div>${escapeHtml(s.text)}</div>
+              ${tr}
+            </div>`;
+          })
+          .join("");
+        transcript.scrollTop = transcript.scrollHeight;
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+      }
+
+      async function loadProfiles() {
+        const res = await fetch("/v1/profiles");
+        const data = await res.json();
+        const sel = el("profile");
+        sel.innerHTML = "";
+        (data.profiles || []).forEach((p) => {
+          const opt = document.createElement("option");
+          opt.value = p;
+          opt.textContent = p;
+          sel.appendChild(opt);
+        });
+      }
+
+      async function loadSettings() {
+        const res = await fetch("/v1/settings");
+        if (!res.ok) {
+          keyStatus.textContent = "OpenAI key: error";
+          keyStatus.className = "badge err";
+          return;
+        }
+        const data = await res.json();
+        const s = data.settings || {};
+        // populate fields
+        el("asr_mode").value = s.asr_mode || "offline";
+        el("asr_default_model").value = s.asr_default_model || "";
+        el("asr_compute_type").value = s.asr_compute_type || "";
+        el("vad_max_segment_ms").value = String(s.vad_max_segment_ms || "");
+        el("openai_asr_model").value = s.openai_asr_model || "";
+        el("translate_enabled").value = (s.translate_enabled === false) ? "off" : "on";
+	        el("translate_target_language").value = s.translate_target_language || "zh";
+	        el("openai_model_translate").value = s.openai_model_translate || "";
+	        el("openai_model_summary").value = s.openai_model_summary || "";
+	        el("openai_model_explain").value = s.openai_model_explain || "";
+	        applyAsrModeUi();
+	        applyTranslateUi();
+	        updateCfgStatus();
+	        if (s.openai_api_key_set) {
+	          keyStatus.textContent = `OpenAI key: set (${s.openai_api_key_masked || "***"})`;
+	          keyStatus.className = "badge ok";
+	        } else {
+          keyStatus.textContent = "OpenAI key: not set";
+          keyStatus.className = "badge";
+        }
+      }
+
+      async function saveKey() {
+        const key = el("openai_key").value || "";
+        const res = await fetch("/v1/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ openai_api_key: key }),
+        });
+        if (!res.ok) {
+          log("save key failed: " + (await res.text()));
+          return;
+        }
+        el("openai_key").value = "";
+        const data = await res.json();
+        if (data.note) log(data.note);
+        await loadSettings();
+      }
+
+      async function saveModels() {
+        const payload = {
+          asr_mode: el("asr_mode").value || "offline",
+          asr_default_model: el("asr_default_model").value || "",
+          asr_compute_type: el("asr_compute_type").value || "",
+          vad_max_segment_ms: Number(el("vad_max_segment_ms").value || 0) || null,
+          openai_asr_model: el("openai_asr_model").value || "",
+          translate_enabled: (el("translate_enabled").value || "on") === "on",
+          translate_target_language: el("translate_target_language").value || "zh",
+          openai_model_translate: el("openai_model_translate").value || "",
+          openai_model_summary: el("openai_model_summary").value || "",
+          openai_model_explain: el("openai_model_explain").value || "",
+        };
+        const res = await fetch("/v1/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          log("save models failed: " + (await res.text()));
+          return;
+        }
+        const data = await res.json();
+        if (data.note) log(data.note);
+        await loadSettings();
+      }
+
+      async function start() {
+        segments.clear();
+        renderTranscript();
+	        summary.textContent = "-";
+	        exportLink.style.display = "none";
+	        exportLink.href = "#";
+	        updateCfgStatus();
+	        setRunStatus("", "starting…");
+
+        const profile = el("profile").value || "Meeting";
+        const res = await fetch("/v1/sessions/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ profile }),
+        });
+        if (!res.ok) {
+          log("start failed: " + (await res.text()));
+          return;
+        }
+        const data = await res.json();
+        sessionId = data.session_id;
+        sidBadge.textContent = sessionId;
+        el("stop").disabled = false;
+        el("start").disabled = true;
+        el("explain").disabled = false;
+        el("export").disabled = false;
+
+        connectWs();
+      }
+
+      async function stop() {
+        const res = await fetch("/v1/sessions/stop", { method: "POST" });
+        if (!res.ok) log("stop failed: " + (await res.text()));
+        if (ws) ws.close();
+        ws = null;
+        setStatus("", "disconnected");
+        setRunStatus("", "idle");
+        el("stop").disabled = true;
+        el("start").disabled = false;
+        el("explain").disabled = true;
+      }
+
+      function connectWs() {
+        if (!sessionId) return;
+        const proto = location.protocol === "https:" ? "wss" : "ws";
+        ws = new WebSocket(`${proto}://${location.host}/v1/sessions/${sessionId}/ws`);
+        setStatus("", "connecting");
+        ws.onopen = () => setStatus("ok", "connected");
+        ws.onclose = () => setStatus("", "disconnected");
+        ws.onerror = () => setStatus("err", "error");
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            onEvent(msg);
+          } catch (e) {
+            // ignore
+          }
+        };
+      }
+
+      function onEvent(ev) {
+        const t = ev.type;
+        const p = ev.payload || {};
+        if (t === "audio.level") {
+          setMicLevel(p.rms);
+        } else if (t === "asr.segment.partial") {
+          const id = p.segment_id;
+          const cur = segments.get(id) || {};
+          segments.set(id, {
+            ...cur,
+            id,
+            start_ms: p.start_ms,
+            end_ms: p.end_ms,
+            text: p.text,
+            partial: true,
+          });
+          renderTranscript();
+        } else if (t === "session.started") {
+          setRunStatus("ok", "running");
+        } else if (t === "session.stopped") {
+          setRunStatus("", "stopped");
+        } else if (t === "job.progress") {
+          const job = p.job || "";
+          if (job === "asr.model") {
+            const st = p.state || "";
+            const model = p.model || "";
+            if (st === "loading") setRunStatus("", `ASR loading ${model || ""}`.trim());
+            else if (st === "ready") setRunStatus("ok", `ASR ready ${model || ""}`.trim());
+            else setRunStatus("", `ASR ${st} ${model || ""}`.trim());
+          } else if (job) {
+            log("job.progress: " + JSON.stringify(p));
+          }
+        } else if (t === "asr.segment.final") {
+          const id = p.segment_id;
+          const cur = segments.get(id) || {};
+          segments.set(id, {
+            ...cur,
+            id,
+            start_ms: p.start_ms,
+            end_ms: p.end_ms,
+            text: p.text,
+            partial: false,
+          });
+          renderTranscript();
+        } else if (t === "translate.segment.final") {
+          const id = p.segment_id;
+          const cur = segments.get(id) || {};
+          segments.set(id, { ...cur, id, tr: p.text });
+          renderTranscript();
+        } else if (t === "summary.update") {
+          const s = p.summary || {};
+          const bullets = (s.bullets || []).slice(0, 8).map((b) => `- ${b}`);
+          const kws = (s.keywords || []).slice(0, 12).join(", ");
+          summary.textContent =
+            bullets.join("\n") + (kws ? `\n\nKeywords: ${kws}` : "");
+        } else if (t === "explain.result") {
+          el("explain_out").textContent = p.text || "";
+        } else if (t === "export.ready") {
+          log("export ready: " + p.path);
+          exportLink.style.display = "inline";
+          exportLink.href = `/v1/sessions/${sessionId}/export.md`;
+        } else if (t === "job.error") {
+          log("job.error: " + JSON.stringify(p));
+          if ((p.job || "") === "asr") setRunStatus("err", "ASR error");
+          if ((p.job || "") === "asr.model") setRunStatus("err", "ASR model error");
+          if ((p.job || "") === "audio_init") setRunStatus("err", "Audio error");
+        }
+      }
+
+	      function applyAsrModeUi() {
+	        const mode = el("asr_mode").value || "offline";
+	        const online = mode === "online";
+	        el("asr_online_fields").style.display = online ? "block" : "none";
+	        el("asr_offline_fields").style.display = online ? "none" : "block";
+
+	        const hint = el("asr_offline_hint");
+	        if (hint) {
+	          hint.style.display = "none";
+	          hint.textContent = "";
+	        }
+	        if (!online && hint) {
+	          const m = String(el("asr_default_model").value || "").trim().toLowerCase();
+	          if (m === "whisper-1" || m.startsWith("gpt-") || m.includes("transcribe")) {
+	            hint.textContent =
+	              "Hint: Offline ASR uses faster-whisper models (e.g. small/medium/large-v3). " +
+	              "Models like whisper-1 / gpt-*-transcribe are OpenAI online models and won’t work offline.";
+	            hint.style.display = "block";
+	          }
+	        }
+	      }
+
+	      function applyTranslateUi() {
+	        const on = (el("translate_enabled").value || "on") === "on";
+	        el("translate_target_language").disabled = !on;
+	        el("openai_model_translate").disabled = !on;
+	      }
+
+	      function updateCfgStatus() {
+	        const mode = el("asr_mode").value || "offline";
+	        if (mode === "online") {
+	          const m = String(el("openai_asr_model").value || "gpt-4o-mini-transcribe").trim();
+	          cfgStatus.textContent = `ASR: online (${m})`;
+	          return;
+	        }
+	        const m = String(el("asr_default_model").value || "small").trim();
+	        const ct = String(el("asr_compute_type").value || "").trim();
+	        const vad = String(el("vad_max_segment_ms").value || "").trim();
+	        const parts = [m];
+	        if (ct) parts.push(ct);
+	        if (vad) parts.push(`VAD ${vad}ms`);
+	        cfgStatus.textContent = `ASR: offline (${parts.join(", ")})`;
+	      }
+
+	      function _getExplainTerm() {
+	        const typed = (el("term").value || "").trim();
+	        if (typed) return typed;
+	        try {
+          const sel = (window.getSelection && window.getSelection().toString()) || "";
+          if (sel.trim()) return sel.trim();
+        } catch (_e) {
+          // ignore
+        }
+        return "";
+      }
+
+      async function explainTerm() {
+        if (!sessionId) {
+          log("explain: no active session");
+          return;
+        }
+        const term = _getExplainTerm();
+        if (!term) {
+          log("explain: type a term or select text in transcript first");
+          return;
+        }
+        el("explain").disabled = true;
+        el("explain_out").textContent = "…";
+        try {
+          log(`explain: ${term}`);
+          const res = await fetch(`/v1/sessions/${sessionId}/explain`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ term }),
+          });
+          if (!res.ok) {
+            log("explain failed: " + (await res.text()));
+            el("explain_out").textContent = "";
+            return;
+          }
+          const data = await res.json();
+          el("explain_out").textContent = data.text || "";
+        } catch (e) {
+          log("explain error: " + (e && e.message ? e.message : String(e)));
+          el("explain_out").textContent = "";
+        } finally {
+          // Re-enable only if session is still active.
+          el("explain").disabled = !sessionId || el("start").disabled === false;
+        }
+      }
+
+      async function exportMd() {
+        if (!sessionId) return;
+        const res = await fetch(`/v1/sessions/${sessionId}/export`, { method: "POST" });
+        if (!res.ok) log("export failed: " + (await res.text()));
+        else {
+          const data = await res.json();
+          log("export: " + data.path);
+          exportLink.style.display = "inline";
+          exportLink.href = `/v1/sessions/${sessionId}/export.md`;
+        }
+      }
+
+      el("start").onclick = start;
+      el("stop").onclick = stop;
+      el("explain").onclick = explainTerm;
+	      el("export").onclick = exportMd;
+	      el("save_key").onclick = saveKey;
+	      el("save_models").onclick = saveModels;
+	      el("asr_mode").onchange = () => {
+	        applyAsrModeUi();
+	        updateCfgStatus();
+	      };
+	      el("translate_enabled").onchange = applyTranslateUi;
+	      el("asr_default_model").oninput = () => {
+	        applyAsrModeUi();
+	        updateCfgStatus();
+	      };
+	      el("asr_compute_type").oninput = updateCfgStatus;
+	      el("vad_max_segment_ms").oninput = updateCfgStatus;
+	      el("openai_asr_model").oninput = updateCfgStatus;
+
+	      loadProfiles().catch((e) => log("profiles load failed: " + e));
+	      loadSettings().catch((e) => log("settings load failed: " + e));
+	    </script>
+  </body>
+</html>

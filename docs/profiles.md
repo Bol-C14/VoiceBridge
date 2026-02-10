@@ -4,25 +4,26 @@ Profiles capture per-scenario behavior without changing code. Each profile lives
 
 ## Schema (fields)
 - `name`: display name (used as key when loading).
-- `input_mode`: `"manual"`, `"asr"`, or `"manual+asr"`.
-- `tts_backend`: backend id (e.g., `elevenlabs`, `openai`).
-- `default_voice`: voice id for TTS calls.
-- `output_device`: audio output/virtual mic target.
-- `reply_strategy`:
-  - `auto_suggest` (bool): generate reply suggestions automatically.
-  - `auto_speak` (bool): whether to send TTS without user confirmation.
-  - `max_suggestion_length` (int): soft cap for reply length.
-  - `allow_agent_mode` (bool): permit unattended agent behavior.
-- `prompts`: prompt templates keyed by use-case (e.g., `suggestion`, `explain`, `translate`, `summarize`).
+- `mode`: scenario id (e.g., `"meeting"`, `"teaching"`, `"vrchat"`).
+- Meeting-mode nested fields:
+  - `audio`: `input_device`, `sample_rate`, `channels`, `frame_duration_ms`
+  - `asr`: `backend`, `model`, `language`
+  - `translate`: `enabled`, `target_language`, `model`
+  - `summary`: `enabled`, `cadence_sec`, `model`
+  - `explain`: `enabled`, `model`
+  - `diarize`: `run` (`post_meeting` / `none`)
+  - `storage`: `save_audio`, `save_events`
+- `prompts`: prompt templates keyed by use-case (e.g., `translate`, `summarize`, `explain`).
 - `metadata`: optional misc values for UI or analytics.
 
 ## Examples
-- `config/profiles/teaching.yml`: manual+ASR, no auto-speak, teaching prompts (`explain`, `suggestion`, `summarize`).
-- `config/profiles/vrchat.yml`: ASR-driven, auto-speak enabled, social prompts (`suggestion`, `translate`), targets a virtual cable output.
+- `config/profiles/meeting.yml`: mic → VAD → local ASR → translate/summary/explain (OpenAI optional), persists session artifacts.
+- `config/profiles/teaching.yml` / `config/profiles/vrchat.yml`: legacy Phase 0 profiles (still accepted by the loader; will be migrated to the unified schema).
 
 ## Adding a new profile
 1) Copy an existing YAML in `config/profiles/`.
-2) Update `name`, `input_mode`, TTS/backend/voice/output.
-3) Tailor `reply_strategy` to the safety level you want.
-4) Provide prompts that match the scenario. Keep them short and explicit about style/tone.
-5) Run `python3 cli/smoke.py --profile "<ProfileName>"` to validate loading.
+2) Set `name` + `mode`, then fill mode-specific config.
+3) Provide prompts that match the scenario. Keep them short and explicit about style/tone.
+4) Validate by running:
+   - Meeting: `voicebridge meeting --profile "<ProfileName>"`
+   - Daemon: `voicebridge-daemon` then `POST /v1/sessions/start` with that profile.

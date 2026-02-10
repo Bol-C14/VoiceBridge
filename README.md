@@ -1,37 +1,48 @@
 # VoiceBridge Core
 
-Unified “listen → understand → help you think → speak” engine for teaching, VRChat accessibility, and meetings. This repo currently contains Phase 0 scaffolding (types, config, logging, stubs) to unblock early integration.
+Cross-platform “meeting companion” and voice interaction core: **mic capture → realtime transcription → translation → rolling summary → on‑demand explanations**, designed to expand into teaching + gaming (VRChat) via Profiles.
 
 ## Status
-- Phase 0: core dataclasses, config loader, logging, profile samples, CLI smoke script.
-- Not yet implemented: actual ASR/LLM/TTS calls, audio I/O, agent behaviors.
+- Meeting mode (hybrid) foundation implemented:
+  - Local ASR pipeline scaffolding (VAD → segment → ASR)
+  - OpenAI-backed translation/summaries/explanations (optional; uses `config/settings.yml`)
+  - Session storage: `audio.wav`, `events.jsonl`, `transcript.jsonl`, `summary.json`, `export.md`
+  - Daemon (FastAPI + WebSocket) + CLI tools
+- Desktop GUI: stubbed (Tauri/React planned; see `apps/desktop/README.md`).
 
-## Quick start (Phase 0)
-- Prereq: Python 3.10+.
-- Install deps: `python3 -m pip install -r requirements.txt`
-- Configure: `cp config/settings.example.yml config/settings.yml` and fill API keys/devices (optional at this phase).
-- Smoke test: `python3 cli/smoke.py --profile Teaching` (warns if keys missing; verifies profiles load).
+## Quick start (Meeting mode)
+- Prereq: Python 3.9+
+- One-click (recommended):
+  - `bash scripts/oneclick.sh` (sets up venv + installs deps + starts daemon)
+  - Or: `bash scripts/oneclick.sh meeting`
+- Manual install (dev/editable):
+  - Create venv, then `python -m pip install -U pip`
+  - `python -m pip install -r requirements.txt`
+  - Optional mic/VAD/ASR deps: `python -m pip install -e "packages/voicebridge_core[audio,vad,asr]"`
+- Configure:
+  - `cp config/settings.example.yml config/settings.yml`
+  - Option A (recommended): start daemon and set OpenAI key in the UI (`/` page).
+  - Option B: set `openai_api_key` in `config/settings.yml` if you prefer file-based config.
+- Run CLI meeting:
+  - `voicebridge meeting --profile Meeting` (Ctrl+C to stop)
+- Run daemon:
+  - `voicebridge-daemon --host 127.0.0.1 --port 8765`
+  - WebSocket: `ws://127.0.0.1:8765/v1/sessions/<session_id>/ws`
 
 ## Config
-- Settings: `config/settings.yml` (API keys, default audio devices, extras). Missing file is tolerated during Phase 0.
-- Profiles: `config/profiles/*.yml`. Two examples exist: `Teaching` and `VRChat`. Key fields:
-  - `input_mode`: "manual", "asr", or "manual+asr"
-  - `tts_backend`, `default_voice`, `output_device`
-  - `reply_strategy`: `auto_suggest`, `auto_speak`, `max_suggestion_length`, `allow_agent_mode`
-  - `prompts`: mode-specific prompt templates (e.g., `suggestion`, `explain`, `translate`)
+- Settings: `config/settings.yml` (OpenAI models/keys, storage dir, ASR defaults).
+- Profiles: `config/profiles/*.yml` (Meeting/Teaching/VRChat). Meeting profile uses nested sections:
+  - `audio`, `asr`, `translate`, `summary`, `explain`, `diarize`, `storage`, `prompts`
 
 ## Repo layout (current)
-- `core/`: types, config loader, logging helpers
-- `services/`: abstract ASR/LLM/TTS interfaces
-- `conversation/`: session manager
-- `understanding/`: intent/suggestion stubs
-- `orchestrator/`: flow coordinator shell
-- `audio_io/`: audio input/output interfaces
-- `config/`: settings and profile YAMLs
-- `cli/`: smoke test entrypoint
-- `docs/architecture.md`: full architecture and phase roadmap
+- `packages/voicebridge_core/`: core library (types/events/config/runtime/storage/services)
+- `apps/daemon/`: FastAPI daemon (`voicebridge-daemon`)
+- `apps/cli/`: CLI tools (`voicebridge`)
+- `apps/desktop/`: GUI plan + bootstrap notes
+- `config/`: settings + profile YAMLs
+- `docs/`: architecture + profiles guide
 
 ## Next steps
-- Add concrete service implementations (OpenAI/Whisper/ElevenLabs) and wire to orchestrator.
-- Implement text-only flow (intent + suggestions) in CLI.
-- Extend audio I/O backends and agent auto-speak policy window.
+- Replace heuristic diarization with a real backend (pyannote/speechbrain plugin).
+- Add system-audio/loopback capture for online meetings.
+- Implement the Tauri + React desktop UI (main window + overlay).

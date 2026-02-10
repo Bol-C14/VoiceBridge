@@ -1,7 +1,28 @@
 openai_api_key: "YOUR_OPENAI_KEY"
+openai_base_url: "https://api.openai.com/v1"
+openai_model_translate: "gpt-4o-mini"
+openai_model_summary: "gpt-4o-mini"
+openai_model_explain: "gpt-4o-mini"
+# Translation defaults (apply to new sessions)
+translate_enabled: true
+translate_target_language: "zh"
 elevenlabs_api_key: "YOUR_ELEVENLABS_KEY"
 audio_output_device: "system_speakers"
 audio_input_device: "default_mic"
+# Optional: where to store session artifacts (audio/events/transcripts/exports).
+# Defaults to ~/.voicebridge
+# storage_dir: "/path/to/voicebridge-data"
+# Default local ASR model size/name (used when profile.asr.model is omitted)
+asr_default_model: "small"
+# ASR mode: "offline" (local) or "online" (OpenAI streaming)
+asr_mode: "offline"
+openai_asr_model: "gpt-4o-mini-transcribe"
+# Optional: faster-whisper compute type (e.g. int8)
+# asr_compute_type: "int8"
+# Optional: VAD max segment length for offline ASR
+# vad_max_segment_ms: 5000
+# Enable diarization post-process (requires optional deps; may be skipped if unavailable)
+diarization_enabled: true
 # Add any provider-specific or environment keys under extras.
 extras:
   environment: "dev"

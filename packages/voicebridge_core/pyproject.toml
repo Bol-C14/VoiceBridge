@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voicebridge-core"
+version = "0.1.0"
+description = "VoiceBridge Core: meeting/teaching/VRChat voice interaction engine (core library)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [{ name = "VoiceBridge contributors" }]
+dependencies = [
+  "PyYAML>=6.0",
+  "requests>=2.31.0",
+  "urllib3<2",
+]
+
+[project.optional-dependencies]
+audio = [
+  "numpy>=1.23.0",
+  "sounddevice>=0.4.6",
+]
+vad = [
+  # webrtcvad depends on pkg_resources, which was removed in newer setuptools.
+  "setuptools<81",
+  "webrtcvad>=2.0.10",
+]
+asr = [
+  "numpy>=1.23.0",
+  "faster-whisper>=1.0.0",
+]
+dev = [
+  "pytest>=7.4.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["voicebridge*"]

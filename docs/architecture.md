@@ -1,14 +1,24 @@
-````markdown
 # VoiceBridge Core 架构说明（初稿）
 
 > 目标：为**教学 / VRChat / 会议 / 跨语言交流**提供统一的语音交互内核。  
 > 本文档面向：产品合作者、后端开发者、桌面端开发者。
 
-## 当前实现状态（Phase 0）
+## 当前实现状态（Meeting 优先：Phase 1/2 foundations）
 
-- 已落地：核心类型（Session/Utterance/Profile）、配置加载、基础 logging、Profile 示例、CLI smoke 脚本。
-- 未落地：ASR/LLM/TTS 具体实现、Audio I/O、Agent 自动发声逻辑。
-- 快速体验：`python3 -m pip install -r requirements.txt` → `cp config/settings.example.yml config/settings.yml` → `python3 cli/smoke.py --profile Teaching`。更多说明见仓库根目录的 README。
+- 已落地（Meeting MVP 基建）：
+  - `voicebridge-core`：事件模型、Profile/Settings 加载、Session 存储（`audio.wav`/`events.jsonl`/`transcript.jsonl`/`summary.json`/`export.md`）
+  - Meeting runtime：mic → VAD → local ASR（faster-whisper）→（可选）OpenAI 翻译/滚动总结/术语解释
+  - `voicebridge-daemon`：FastAPI + WebSocket 事件流（UI 可订阅并回放 events）
+  - `voicebridge` CLI：会议录制/导出
+  - 后处理：轻量“启发式”说话人标注（Speaker A/B，占位实现）
+- 未落地/待增强：
+  - 真正的 speaker diarization（pyannote/speechbrain 等可插拔后端）
+  - 系统音频/loopback（用于线上会议）
+  - Tauri + React 桌面 UI（主窗口 + overlay）
+- 快速体验（Meeting）：
+  - `python3 -m pip install -r requirements.txt`
+  - `cp config/settings.example.yml config/settings.yml`（填 `openai_api_key` 可启用翻译/总结/解释）
+  - `voicebridge meeting --profile Meeting`
 
 ---
 
@@ -71,7 +81,7 @@
   - TTS → 虚拟麦克风（其他玩家听到就是“说话”）
   - 可选：字幕浮窗（自己看到）
 
-### 2.3 Meeting / Cross-Language Mode（后期）
+### 2.3 Meeting / Cross-Language Mode（当前重点）
 
 - 输入：
   - 会议音频（系统捕获）
@@ -103,7 +113,7 @@ class Session:
     utterances: list[Utterance]
     suggestions: list[Suggestion]
     metadata: dict
-````
+```
 
 ### 3.2 Participant（参与者）
 
@@ -525,42 +535,30 @@ Agent 模式的 “1–2 秒可打断窗口” 可以在这里实现：
 ## 12. 项目结构建议
 
 ```text
-voicebridge-core/
+VoiceBridge/
+  packages/
+    voicebridge_core/
+      voicebridge/
+        core/            # types, events, logging
+        config/          # settings + profile loader
+        audio_io/        # mic input + wav writer
+        runtime/         # VAD segmenter + meeting runner
+        services/        # ASR/OpenAI (translate/summary/explain)
+        storage/         # session store + sqlite index
+        postprocess/     # diarization placeholder + exporters
+  apps/
+    daemon/             # FastAPI + WebSocket (voicebridge-daemon)
+    cli/                # CLI tools (voicebridge)
+    desktop/            # Tauri/React UI (planned)
+  config/
+    profiles/
+      meeting.yml
+      teaching.yml
+      vrchat.yml
+    settings.yml
   docs/
     architecture.md
     profiles.md
-  config/
-    profiles/
-      teaching.yml
-      vrchat.yml
-      meeting.yml
-    settings.yml
-  core/
-    types.py            # Session, Utterance, Suggestion, Profile, ReplyStrategy
-    config.py           # 加载配置
-    logging.py
-  services/
-    asr_base.py
-    asr_whisper.py
-    llm_base.py
-    llm_openai.py
-    tts_base.py
-    tts_elevenlabs.py
-    translate_base.py
-  audio_io/
-    backend_base.py
-    backend_windows.py
-    backend_macos.py
-  conversation/
-    session_manager.py
-  understanding/
-    intent_analyzer.py
-    explanation_engine.py
-    suggestion_engine.py
-  orchestrator/
-    orchestrator.py
-  cli/
-    tts_console.py      
 ```
 
 ---
@@ -569,51 +567,39 @@ voicebridge-core/
 
 ### Phase 0：基础类型 & 配置
 
-* 实现 `core/types.py`（Session/Utterance/…）
-* 实现 `core/config.py`（Profile & settings 加载）
+* 实现 `packages/voicebridge_core/voicebridge/core/types.py`（Session/Utterance/TranscriptSegment/…）
+* 实现 `packages/voicebridge_core/voicebridge/config/loader.py`（Profile & settings 加载）
 * 实现基础 logging
 
-### Phase 1：外部服务封装
+### Phase 1：Meeting 录制 & 事件流（已落地）
 
-* `LLMService`（OpenAI）
-* `TTSService`（ElevenLabs + OpenAI）
-* `ASRService`（先用 Whisper API）
+* mic → VAD → ASR 的最小闭环
+* Session 存储（events/transcript/audio/export）
+* CLI + daemon（WebSocket 回放+直播）
 
-### Phase 2：Conversation & Suggestion（纯文字流程）
+### Phase 2：Hybrid 智能能力（已落地基础，待增强）
 
-* `ConversationSession`
-* `analyze_intent`
-* `SuggestionEngine`
-* 在 CLI 中实现：
+* OpenAI 翻译/滚动总结/术语解释（可选）
+* 断网/缺 key：转写继续，翻译/总结可 backfill（best effort）
+* diarization：当前为启发式占位；后续接入真实后端
 
-  * 输入文本 → LLM → 建议 → TTS 播放
+### Phase 3：桌面端 UI（规划）
 
-### Phase 3：引入 Profile 概念
+* Tauri + React 主窗口 + overlay
+* 热键、术语点击解释、导出管理、历史会话列表
 
-* teaching.yml / vrchat.yml
-* 把 SuggestionEngine 和 intent 分析改为使用 Profile 的 prompts
+### Phase 4：扩展到线上会议 / Teaching / VRChat（规划）
 
-### Phase 4：接入 Audio I/O（初步）
-
-* WindowsAudioBackend（播放 + 简单 loopback 测试）
-* Orchestrator 增加 `handle_remote_audio` 的逻辑
-
-### Phase 5：Agent 模式（试验）
-
-* 定义 AgentPolicy
-* Orchestrator 中加入 auto_speak/override window 的逻辑
-
-### Phase 6：封装成可分发的核心库
-
-* 将核心逻辑从 CLI 中抽离为 `voicebridge-core` 包
-* CLI / 桌面客户端 / VRChat 助手都以此为依赖
+* 系统音频 loopback 捕获（Win/macOS）
+* Profile 驱动的多场景 UI/策略复用
+* TTS 输出与 VRChat 虚拟麦克风
 
 ---
 
 ## 14. 给协作开发者的说明
 
 * **如果你是后端开发：**
-  重点关注 `core/`, `services/`, `conversation/`, `understanding/`, `orchestrator/`
+  重点关注 `packages/voicebridge_core/voicebridge/`（core/config/runtime/storage/services）与 `apps/daemon/voicebridge_daemon/`（FastAPI + WS）。
 
   * 请不要在业务逻辑中硬编码 Profile / Prompt，而是放到 config/profile 文件中。
   * 所有与外部服务（OpenAI/ElevenLabs）的调用，都应通过 `services/` 内的封装类实现。
@@ -621,9 +607,9 @@ voicebridge-core/
 * **如果你是桌面/前端开发：**
   重点关注：
 
-  * Orchestrator 提供的接口（如 `handle_remote_audio`, `handle_local_text`）
-  * Audio I/O backend 对设备的抽象方法
-  * 你可以将 CLI/TUI 替换为桌面 UI，但后端逻辑保持不变。
+  * daemon API/WS（`/v1/sessions/*`）与事件 schema（`schema_version/seq/type/payload`）
+  * `apps/desktop/`（Tauri + React，主窗口 + overlay）
+  * UI 只做展示与交互，音频/模型调用都在本地 daemon 内完成（key 不进前端）。
 
 * **如果你是产品设计 / Prompt 工程方向：**
 
@@ -638,7 +624,3 @@ voicebridge-core/
 
 > 本文档是架构初稿，后续可按实际实现情况调整。
 > 建议：每完成一个 Phase，即补充对应部分的实现细节与示例。
-
-```
-::contentReference[oaicite:0]{index=0}
-```
